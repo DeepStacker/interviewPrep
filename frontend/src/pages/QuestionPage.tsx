@@ -18,9 +18,23 @@ const QuestionPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+  const [wordCount, setWordCount] = useState(0);
+  const [charCount, setCharCount] = useState(0);
+  const [tabSwitches, setTabSwitches] = useState(0);
+  const [windowBlurCount, setWindowBlurCount] = useState(0);
+  const [pasteCount, setPasteCount] = useState(0);
+  const [keystrokes, setKeystrokes] = useState(0);
+  const [startedAt] = useState(() => Date.now());
+  const recognitionRef = React.useRef<any>(null);
 
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
+
+  const answerWords = userAnswer.trim().split(/\s+/).filter(Boolean);
+  const minWords = 8;
+  const minChars = 40;
+  const answerTooShort = charCount > 0 && (wordCount < minWords || charCount < minChars);
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -53,37 +67,103 @@ const QuestionPage: React.FC = () => {
     loadQuestions();
   }, [sessionId, setQuestions]);
 
+  useEffect(() => {
+    const supported =
+      'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+    setSpeechSupported(supported);
+
+    const onVisibility = () => {
+      if (document.hidden) {
+        setTabSwitches((count) => count + 1);
+      }
+    };
+
+    const onBlur = () => setWindowBlurCount((count) => count + 1);
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setWordCount(answerWords.length);
+    setCharCount(userAnswer.trim().length);
+  }, [userAnswer]);
+
   const handleVoiceInput = () => {
-    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-      alert('Speech recognition not supported in your browser');
+    if (!speechSupported) {
+      setError('Speech recognition is not supported in this browser.');
       return;
     }
 
-    const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+    setError(null);
+
+    if (isSpeaking && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
     const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = 'en-US';
 
     recognition.onstart = () => setIsSpeaking(true);
     recognition.onend = () => setIsSpeaking(false);
+    recognition.onerror = () => {
+      setIsSpeaking(false);
+      setError('Voice input failed. Please try again or type your answer.');
+    };
     recognition.onresult = (event: any) => {
-      let transcript = '';
+      let finalText = '';
+      let interimText = '';
+
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        transcript += event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
+        if (event.results[i].isFinal) {
+          finalText += text;
+        } else {
+          interimText += text;
+        }
       }
-      setUserAnswer(transcript);
+
+      const merged = [userAnswer, finalText, interimText].filter(Boolean).join(' ').trim();
+      setUserAnswer(merged);
     };
 
+    recognitionRef.current = recognition;
     recognition.start();
   };
 
   const handleSubmitAnswer = async () => {
     if (!userAnswer.trim() || !currentQuestion) return;
 
+    if (answerTooShort) {
+      setError(`Answer too short. Add at least ${minWords} words and ${minChars} characters.`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setError(null);
 
       // Submit answer for evaluation
-      const response = await answersAPI.submit(currentQuestion.id, userAnswer);
+      const response = await answersAPI.submit(currentQuestion.id, userAnswer, {
+        tabSwitches,
+        windowBlurCount,
+        pasteCount,
+        keystrokes,
+        elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+      });
       const answer: Answer = response.data;
 
       // Store answer
@@ -101,6 +181,28 @@ const QuestionPage: React.FC = () => {
       setError('Failed to submit answer. Please try again.');
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleAnswerKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key.length === 1) {
+      setKeystrokes((count) => count + 1);
+    }
+
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      void handleSubmitAnswer();
+    }
+
+    if (event.altKey && event.key.toLowerCase() === 'v') {
+      event.preventDefault();
+      handleVoiceInput();
+    }
+
+    if (event.altKey && event.key.toLowerCase() === 's' && currentQuestion) {
+      event.preventDefault();
+      const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
+      window.speechSynthesis.speak(utterance);
     }
   };
 
@@ -179,17 +281,39 @@ const QuestionPage: React.FC = () => {
             <textarea
               value={userAnswer}
               onChange={(e) => setUserAnswer(e.target.value)}
+              onKeyDown={handleAnswerKeyDown}
+              onPaste={() => setPasteCount((count) => count + 1)}
               placeholder="Type your answer here or use voice input..."
               className={styles.answerInput}
               rows={8}
+              aria-label="Interview answer"
             />
+
+            <div className={styles.answerMeta}>
+              <span>{wordCount} words</span>
+              <span>{charCount} characters</span>
+              <span>Paste actions: {pasteCount}</span>
+              <span>Tab switches: {tabSwitches}</span>
+            </div>
+
+            {answerTooShort && (
+              <div className={styles.validationError}>
+                Please provide a detailed answer with at least {minWords} words and {minChars} characters.
+              </div>
+            )}
+
+            <div className={styles.shortcuts}>
+              <p><strong>Keyboard:</strong> Ctrl/Cmd+Enter submit, Alt+V voice input, Alt+S read question aloud.</p>
+            </div>
 
             <div className={styles.inputControls}>
               <button
                 className={`${styles.voiceBtn} ${isSpeaking ? styles.voiceBtnActive : ''}`}
                 onClick={handleVoiceInput}
+                type="button"
+                disabled={!speechSupported}
               >
-                🎤 {isSpeaking ? 'Listening...' : 'Voice Input'}
+                🎤 {isSpeaking ? 'Stop Voice' : speechSupported ? 'Voice Input' : 'Voice Unsupported'}
               </button>
 
               <button

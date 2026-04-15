@@ -4,6 +4,7 @@ export interface Session {
   id: number;
   jobRole: string;
   companyType?: string;
+  interviewType?: 'mixed' | 'technical' | 'behavioral' | 'system_design' | 'rapid_fire';
   difficulty: string;
   totalScore?: number;
   status: 'in_progress' | 'completed';

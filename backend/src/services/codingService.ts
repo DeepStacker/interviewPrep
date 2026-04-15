@@ -63,7 +63,6 @@ export const searchCodingChallenges = async (
     if (filters.searchTerm) {
       query += ` AND (title ILIKE $${params.length + 1} OR description ILIKE $${params.length + 1})`;
       params.push(`%${filters.searchTerm}%`);
-      params.push(`%${filters.searchTerm}%`);
     }
 
     query += ` ORDER BY difficulty ASC, title ASC LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;

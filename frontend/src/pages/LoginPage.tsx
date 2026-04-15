@@ -10,6 +10,7 @@ const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login, setLoading, setError } = useAuthStore();
   const [isLoading, setIsLoading] = React.useState(false);
+  const hasGoogleClientId = Boolean(import.meta.env.VITE_GOOGLE_CLIENT_ID);
 
   const handleGoogleSuccess = async (credentialResponse: any) => {
     try {
@@ -82,7 +83,11 @@ const LoginPage: React.FC = () => {
           <p>Sign in with your Google account</p>
 
           <div className={styles.googleLoginContainer}>
-            {isLoading ? (
+            {!hasGoogleClientId ? (
+              <p className={styles.configError}>
+                Google OAuth is not configured. Set GOOGLE_CLIENT_ID in your environment and restart the frontend.
+              </p>
+            ) : isLoading ? (
               <div className={styles.loading}>
                 <div className={styles.spinner}></div>
                 <p>Signing in...</p>

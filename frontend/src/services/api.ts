@@ -41,6 +41,7 @@ export const sessionsAPI = {
     jobRole: string;
     companyType?: string;
     difficulty: string;
+    interviewType?: 'mixed' | 'technical' | 'behavioral' | 'system_design' | 'rapid_fire';
   }) => apiClient.post('/sessions', data),
   getAll: (limit = 20, offset = 0) =>
     apiClient.get('/sessions', { params: { limit, offset } }),
@@ -59,8 +60,17 @@ export const questionsAPI = {
 
 // Answers API
 export const answersAPI = {
-  submit: (questionId: number, userAnswer: string) =>
-    apiClient.post('/answers', { questionId, userAnswer }),
+  submit: (
+    questionId: number,
+    userAnswer: string,
+    integritySignals?: {
+      tabSwitches?: number;
+      windowBlurCount?: number;
+      pasteCount?: number;
+      elapsedSeconds?: number;
+      keystrokes?: number;
+    }
+  ) => apiClient.post('/answers', { questionId, userAnswer, integritySignals }),
   getByQuestion: (questionId: number) =>
     apiClient.get(`/questions/${questionId}/answer`),
   getBySession: (sessionId: number) =>
@@ -116,7 +126,12 @@ export const roadmapAPI = {
 
 // Mock Interview API
 export const mockInterviewAPI = {
-  schedule: (data: { interviewerUserId?: number; type: string; scheduledDate: string }) =>
+  schedule: (data: {
+    companyId: number;
+    interviewerUserId?: number;
+    interviewType: string;
+    scheduledAt: string;
+  }) =>
     apiClient.post('/mock-interview/schedule', data),
   getScheduled: (limit = 20, offset = 0) =>
     apiClient.get('/mock-interview', { params: { limit, offset } }),

@@ -40,12 +40,23 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
 function App() {
   const token = useAuthStore((state) => state.token);
   const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+  const oauthConfigured = googleClientId.trim().length > 0;
 
   useEffect(() => {
     if (token) {
       setAuthToken(token);
     }
   }, [token]);
+
+  if (!oauthConfigured) {
+    return (
+      <Router>
+        <Routes>
+          <Route path="*" element={<LoginPage />} />
+        </Routes>
+      </Router>
+    );
+  }
 
   return (
     <GoogleOAuthProvider clientId={googleClientId}>

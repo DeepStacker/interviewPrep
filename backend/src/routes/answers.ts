@@ -13,10 +13,24 @@ router.post('/answers', authMiddleware, async (req: AuthRequest, res: Response) 
       return;
     }
 
-    const { questionId, userAnswer } = req.body;
+    const { questionId, userAnswer, integritySignals } = req.body;
 
     if (!questionId || !userAnswer) {
       res.status(400).json({ error: 'questionId and userAnswer are required' });
+      return;
+    }
+
+    if (typeof userAnswer !== 'string') {
+      res.status(400).json({ error: 'userAnswer must be a string' });
+      return;
+    }
+
+    const normalizedAnswer = userAnswer.trim();
+    const wordCount = normalizedAnswer.split(/\s+/).filter(Boolean).length;
+    if (normalizedAnswer.length < 40 || wordCount < 8) {
+      res.status(400).json({
+        error: 'Answer is too short. Provide at least 8 words and 40 characters.',
+      });
       return;
     }
 
@@ -39,20 +53,32 @@ router.post('/answers', authMiddleware, async (req: AuthRequest, res: Response) 
     const evaluation = await evaluateAnswer(
       question.job_role,
       question.question_text,
-      userAnswer,
+      normalizedAnswer,
       question.difficulty
     );
 
+    const normalizedSignals = normalizeIntegritySignals(integritySignals);
+    const integrityFlags = getIntegrityFlags(normalizedSignals);
+    const penalty = Math.min(2, integrityFlags.length);
+    const adjustedScore = Math.max(1, Math.min(10, evaluation.score - penalty));
+
+    const missingPoints =
+      integrityFlags.length > 0
+        ? `${evaluation.missingPoints} | Integrity flags: ${integrityFlags.join(', ')}`
+        : evaluation.missingPoints;
+
     // Save answer to database
     const result = await pool.query(
-      'INSERT INTO answers (question_id, user_answer, score, strengths, missing_points, ideal_answer, evaluation_time) VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP) RETURNING *',
+      'INSERT INTO answers (question_id, user_answer, score, strengths, missing_points, ideal_answer, integrity_flags, validation_summary, evaluation_time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP) RETURNING *',
       [
         questionId,
-        userAnswer,
-        evaluation.score,
+        normalizedAnswer,
+        adjustedScore,
         evaluation.strengths,
-        evaluation.missingPoints,
+        missingPoints,
         evaluation.idealAnswer,
+        JSON.stringify(normalizedSignals),
+        buildValidationSummary(wordCount, normalizedAnswer.length, integrityFlags),
       ]
     );
 
@@ -145,8 +171,59 @@ const mapAnswerRow = (row: any) => ({
   strengths: row.strengths,
   missingPoints: row.missing_points,
   idealAnswer: row.ideal_answer,
+  integrityFlags: row.integrity_flags,
+  validationSummary: row.validation_summary,
   evaluationTime: row.evaluation_time,
   createdAt: row.created_at,
 });
+
+const normalizeIntegritySignals = (signals: any) => {
+  const safeNumber = (value: any) => {
+    const num = Number(value);
+    return Number.isFinite(num) && num >= 0 ? Math.floor(num) : 0;
+  };
+
+  return {
+    tabSwitches: safeNumber(signals?.tabSwitches),
+    windowBlurCount: safeNumber(signals?.windowBlurCount),
+    pasteCount: safeNumber(signals?.pasteCount),
+    elapsedSeconds: safeNumber(signals?.elapsedSeconds),
+    keystrokes: safeNumber(signals?.keystrokes),
+  };
+};
+
+const getIntegrityFlags = (signals: {
+  tabSwitches: number;
+  windowBlurCount: number;
+  pasteCount: number;
+  elapsedSeconds: number;
+  keystrokes: number;
+}) => {
+  const flags: string[] = [];
+
+  if (signals.pasteCount >= 3) {
+    flags.push('heavy_paste_activity');
+  }
+  if (signals.tabSwitches >= 3 || signals.windowBlurCount >= 3) {
+    flags.push('multiple_focus_switches');
+  }
+  if (signals.elapsedSeconds > 0 && signals.keystrokes <= 2 && signals.pasteCount > 0) {
+    flags.push('low_typing_high_paste_pattern');
+  }
+
+  return flags;
+};
+
+const buildValidationSummary = (
+  wordCount: number,
+  charCount: number,
+  flags: string[]
+) => {
+  const parts = [`words=${wordCount}`, `chars=${charCount}`];
+  if (flags.length > 0) {
+    parts.push(`flags=${flags.join('|')}`);
+  }
+  return parts.join(';');
+};
 
 export default router;

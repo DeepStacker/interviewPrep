@@ -30,7 +30,7 @@ const app = express();
 
 // Security & Performance Middleware
 app.use(helmet({
-  crossOriginOpenerPolicy: false, // Allow Google OAuth cross-origin communication
+  crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
 })); // Add security headers
 app.use(compression()); // Gzip compression
 app.use(express.json({ limit: '10mb' }));
@@ -39,7 +39,7 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // CORS configuration
 app.use(
   cors({
-    origin: config.frontend.url || 'http://localhost:5173',
+    origin: config.frontend.url || 'http://localhost:3000',
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
@@ -84,7 +84,7 @@ app.get('/readyz', async (_req, res) => {
 app.use(errorHandler);
 
 // Initialize and start server
-const startServer = async () => {
+export const startServer = async () => {
   try {
     // Initialize database
     await initializeDatabase();
@@ -101,6 +101,8 @@ const startServer = async () => {
   }
 };
 
-startServer();
+if (require.main === module) {
+  startServer();
+}
 
 export default app;

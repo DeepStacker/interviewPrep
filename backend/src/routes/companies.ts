@@ -1,4 +1,4 @@
-import express, { Router, Request, Response } from 'express';
+import { Router, Request, Response } from 'express';
 import pool from '../config/database';
 
 const router = Router();
@@ -7,114 +7,52 @@ const router = Router();
 interface Company {
   id: number;
   name: string;
-  logo: string;
-  website: string;
-  description: string;
-  founded: number;
-  headquarters: string;
-  interviewTypes: string[];
+  logo?: string;
+  website?: string;
+  description?: string;
+  founded?: number;
+  headquarters?: string;
+  interviewTypes?: string[];
   difficulty: 'easy' | 'medium' | 'hard';
-  focusAreas: string[];
+  focusAreas?: string[];
 }
 
-const COMPANIES: Company[] = [
-  {
-    id: 1,
-    name: 'Google',
-    logo: '🔍',
-    website: 'https://www.google.com',
-    description: 'Search giant and tech innovator. Known for algorithm-heavy interviews.',
-    founded: 1998,
-    headquarters: 'Mountain View, California',
-    interviewTypes: ['Coding', 'System Design', 'Behavioral'],
-    difficulty: 'hard',
-    focusAreas: ['Algorithms', 'Data Structures', 'Distributed Systems', 'Machine Learning'],
-  },
-  {
-    id: 2,
-    name: 'Amazon',
-    logo: '🚀',
-    website: 'https://www.amazon.com',
-    description: 'E-commerce and cloud leader. Focuses on scalability and leadership principles.',
-    founded: 1994,
-    headquarters: 'Seattle, Washington',
-    interviewTypes: ['Coding', 'System Design', 'Behavioral'],
-    difficulty: 'hard',
-    focusAreas: ['System Design', 'Database Design', 'Leadership', 'AWS'],
-  },
-  {
-    id: 3,
-    name: 'Meta',
-    logo: '📱',
-    website: 'https://www.meta.com',
-    description: 'Social media platform. Emphasizes speed to market and product thinking.',
-    founded: 2004,
-    headquarters: 'Menlo Park, California',
-    interviewTypes: ['Coding', 'System Design', 'Product Sense'],
-    difficulty: 'hard',
-    focusAreas: ['System Scale', 'Distributed Systems', 'Product Design', 'Machine Learning'],
-  },
-  {
-    id: 4,
-    name: 'Apple',
-    logo: '🍎',
-    website: 'https://www.apple.com',
-    description: 'Hardware and software innovator. Values user experience and detail.',
-    founded: 1976,
-    headquarters: 'Cupertino, California',
-    interviewTypes: ['Coding', 'System Design', 'Behavioral'],
-    difficulty: 'hard',
-    focusAreas: ['Hardware/Software Integration', 'Performance', 'User Privacy', 'Mobile'],
-  },
-  {
-    id: 5,
-    name: 'Microsoft',
-    logo: '💻',
-    website: 'https://www.microsoft.com',
-    description: 'Software and cloud leader. Known for cloud and enterprise solutions.',
-    founded: 1975,
-    headquarters: 'Redmond, Washington',
-    interviewTypes: ['Coding', 'System Design', 'Behavioral'],
-    difficulty: 'hard',
-    focusAreas: ['Cloud Computing', 'Azure', 'Enterprise Scale', 'AI'],
-  },
-  {
-    id: 6,
-    name: 'Tesla',
-    logo: '⚡',
-    website: 'https://www.tesla.com',
-    description: 'Electric vehicles and energy. Emphasizes innovation and performance.',
-    founded: 2003,
-    headquarters: 'Palo Alto, California',
-    interviewTypes: ['Coding', 'System Design', 'Technical'],
-    difficulty: 'hard',
-    focusAreas: ['Embedded Systems', 'Real-time Systems', 'Battery Tech', 'Autonomy'],
-  },
-  {
-    id: 7,
-    name: 'Netflix',
-    logo: '📺',
-    website: 'https://www.netflix.com',
-    description: 'Streaming entertainment. Known for data-driven decisions and scale.',
-    founded: 1997,
-    headquarters: 'Los Gatos, California',
-    interviewTypes: ['Coding', 'System Design', 'Data Science'],
-    difficulty: 'hard',
-    focusAreas: ['Streaming at Scale', 'Recommendation Systems', 'Data Pipeline', 'Video Tech'],
-  },
-  {
-    id: 8,
-    name: 'LinkedIn',
-    logo: '💼',
-    website: 'https://www.linkedin.com',
-    description: 'Professional networking platform. Focuses on data and recommendations.',
-    founded: 2002,
-    headquarters: 'Sunnyvale, California',
-    interviewTypes: ['Coding', 'System Design', 'Behavioral'],
-    difficulty: 'medium',
-    focusAreas: ['Search', 'Recommendations', 'Networking', 'Data Systems'],
-  },
-];
+const deriveLogo = (name: string, logoUrl?: string | null): string => {
+  if (logoUrl) {
+    return logoUrl;
+  }
+
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() || '')
+    .join('');
+
+  return initials || 'CO';
+};
+
+const parseFocusAreas = (category?: string | null): string[] => {
+  if (!category) {
+    return ['Coding', 'System Design'];
+  }
+
+  return category
+    .split(/[,/|]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+};
+
+const mapCompanyRow = (row: any): Company => ({
+  id: row.id,
+  name: row.name,
+  logo: deriveLogo(row.name, row.logo_url),
+  website: row.website_url || undefined,
+  description: row.description || undefined,
+  difficulty: (row.difficulty_level || 'medium') as 'easy' | 'medium' | 'hard',
+  interviewTypes: ['Coding', 'System Design', 'Behavioral'],
+  focusAreas: parseFocusAreas(row.category),
+});
 
 /**
  * GET /api/companies
@@ -122,10 +60,18 @@ const COMPANIES: Company[] = [
  */
 router.get('/companies', async (req: Request, res: Response) => {
   try {
+    const result = await pool.query(
+      `SELECT id, name, category, description, difficulty_level, logo_url, website_url
+       FROM companies
+       ORDER BY name ASC`
+    );
+
+    const companies = result.rows.map(mapCompanyRow);
+
     res.json({
       status: 'success',
-      data: COMPANIES,
-      total: COMPANIES.length,
+      data: companies,
+      total: companies.length,
     });
   } catch (error: any) {
     console.error('Error fetching companies:', error);
@@ -145,7 +91,22 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
   try {
     const companyId = parseInt(req.params.id as string);
 
-    const company = COMPANIES.find((c) => c.id === companyId);
+    if (!companyId || Number.isNaN(companyId)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid company id',
+      });
+    }
+
+    const companyResult = await pool.query(
+      `SELECT id, name, category, description, difficulty_level, logo_url, website_url
+       FROM companies
+       WHERE id = $1
+       LIMIT 1`,
+      [companyId]
+    );
+
+    const company = companyResult.rows[0] ? mapCompanyRow(companyResult.rows[0]) : null;
 
     if (!company) {
       return res.status(404).json({
@@ -202,6 +163,13 @@ router.get('/companies/:id', async (req: Request, res: Response) => {
 router.get('/companies/:id/problems', async (req: Request, res: Response) => {
   try {
     const companyId = parseInt(req.params.id as string);
+    if (!companyId || Number.isNaN(companyId)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid company id',
+      });
+    }
+
     const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
     const offset = parseInt(req.query.offset as string) || 0;
 
@@ -241,6 +209,12 @@ router.get('/companies/:id/problems', async (req: Request, res: Response) => {
 router.get('/companies/:id/stats', async (req: Request, res: Response) => {
   try {
     const companyId = parseInt(req.params.id as string);
+    if (!companyId || Number.isNaN(companyId)) {
+      return res.status(400).json({
+        status: 'error',
+        message: 'Invalid company id',
+      });
+    }
 
     const result = await pool.query(
       `

@@ -193,7 +193,7 @@ export const leaderboardService = {
       const daysActiveResult = await pool.query(
         `SELECT COUNT(DISTINCT DATE(created_at))::int as days_active
          FROM (
-           SELECT created_at FROM code_submissions WHERE user_id = $1
+           SELECT submitted_at as created_at FROM code_submissions WHERE user_id = $1
            UNION ALL
            SELECT submitted_at as created_at FROM system_design_submissions WHERE user_id = $1
            UNION ALL

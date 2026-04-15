@@ -7,6 +7,13 @@ const execAsync = promisify(exec);
 const UPLOAD_DIR = path.join(__dirname, '../../uploads');
 const RECORDINGS_DIR = path.join(UPLOAD_DIR, 'recordings');
 
+interface MediaProbeResult {
+  durationSeconds: number;
+  bitRateKbps: number;
+  width?: number;
+  height?: number;
+}
+
 // Ensure directories exist
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 if (!fs.existsSync(RECORDINGS_DIR))
@@ -117,6 +124,8 @@ export const analyzeVoice = async (
   userAnswer: string
 ): Promise<VoiceAnalysisResult> => {
   try {
+    const mediaProbe = await probeMediaBuffer(audioBuffer, 'audio');
+
     // Parse user answer for word analysis
     const words = userAnswer
       .toLowerCase()
@@ -141,17 +150,20 @@ export const analyzeVoice = async (
     const fillerPercentage =
       words.length > 0 ? (totalFillerWords / words.length) * 100 : 0;
 
-    // Estimate speaking pace (average speaking pace is 120-150 WPM)
-    // This is a simplified calculation based on word count
-    // In production, you'd analyze the actual audio duration
+    const measuredDurationSeconds = mediaProbe.durationSeconds;
     const estimatedDurationSeconds = Math.max(10, words.length / 2.5);
-    const speakingPace = (words.length / estimatedDurationSeconds) * 60;
+    const durationSeconds = measuredDurationSeconds > 0 ? measuredDurationSeconds : estimatedDurationSeconds;
+    const speakingPace = words.length > 0 ? (words.length / durationSeconds) * 60 : 0;
 
     // Estimate clarity based on sentence structure and pause patterns
     const sentences = userAnswer.split(/[.!?]+/).filter((s) => s.trim());
     const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
-    const voiceClarity =
+    const clarityFromSentenceStructure =
       avgWordsPerSentence < 20 && avgWordsPerSentence > 5 ? 8 : 6;
+    const clarityFromBitrate = mediaProbe.bitRateKbps > 0
+      ? Math.max(5, Math.min(9.5, mediaProbe.bitRateKbps / 32))
+      : 6.5;
+    const voiceClarity = (clarityFromSentenceStructure + clarityFromBitrate) / 2;
 
     // Estimate confidence based on response length and vocabulary
     const vocabularyScore = (uniqueWords.size / words.length) * 10;
@@ -174,8 +186,8 @@ export const analyzeVoice = async (
       },
       pauseData: {
         count: Math.max(0, sentences.length - 1),
-        averageDuration: 0.5,
-        totalDuration: Math.max(0, (sentences.length - 1) * 0.5),
+        averageDuration: Math.round((durationSeconds / Math.max(sentences.length, 1)) * 100) / 100,
+        totalDuration: Math.round(Math.max(0, durationSeconds * 0.25) * 100) / 100,
       },
       speakingPace: Math.min(300, Math.max(80, speakingPace)),
       voiceClarity: Math.round(voiceClarity * 10) / 10,
@@ -196,11 +208,14 @@ export const analyzeBehavior = async (
   sessionContext?: any
 ): Promise<BehaviorAnalysisResult> => {
   try {
-    const byteLength = videoBuffer.length;
-    const mbSize = byteLength / (1024 * 1024);
-
-    // Deterministic heuristic based on recording richness.
-    const richness = Math.max(0, Math.min(10, 4 + mbSize));
+    const probe = await probeMediaBuffer(videoBuffer, 'video');
+    const mbSize = videoBuffer.length / (1024 * 1024);
+    const resolutionScore = probe.width && probe.height
+      ? Math.min(10, Math.max(2, (probe.width * probe.height) / (1920 * 1080) * 10))
+      : 5;
+    const bitRateScore = probe.bitRateKbps > 0 ? Math.min(10, Math.max(2, probe.bitRateKbps / 400)) : 5;
+    const durationScore = probe.durationSeconds > 0 ? Math.min(10, Math.max(2, probe.durationSeconds / 30)) : 5;
+    const richness = Math.max(0, Math.min(10, (mbSize + resolutionScore + bitRateScore + durationScore) / 4));
 
     return {
       eyeContact: Math.max(55, Math.min(92, 55 + richness * 3.2)),
@@ -212,14 +227,15 @@ export const analyzeBehavior = async (
     };
   } catch (error) {
     console.error('Error analyzing behavior:', error);
-    // Return default values on error
+    const mbSize = videoBuffer.length / (1024 * 1024);
+    const richness = Math.max(0, Math.min(10, 3 + mbSize));
     return {
-      eyeContact: 70,
-      facialExpression: 7,
-      bodyMovement: 6,
-      posture: 7,
-      gestureFrequency: 1.5,
-      confidence: 6.5,
+      eyeContact: Math.max(50, Math.min(88, 50 + richness * 3)),
+      facialExpression: Math.max(4, Math.min(9, 4 + richness * 0.5)),
+      bodyMovement: Math.max(4, Math.min(8.5, 4 + richness * 0.45)),
+      posture: Math.max(4.5, Math.min(9, 4.5 + richness * 0.42)),
+      gestureFrequency: Math.max(0.5, Math.min(3, 0.5 + richness * 0.2)),
+      confidence: Math.max(4, Math.min(9, 4 + richness * 0.52)),
     };
   }
 };
@@ -235,8 +251,13 @@ export const analyzeScreenShare = async (
   visualAppealScore: number;
 }> => {
   try {
+    const probe = await probeMediaBuffer(screenBuffer, 'video');
     const mbSize = screenBuffer.length / (1024 * 1024);
-    const quality = Math.max(0, Math.min(10, 5 + mbSize));
+    const resolutionScore = probe.width && probe.height
+      ? Math.min(10, Math.max(2, (probe.width * probe.height) / (1920 * 1080) * 10))
+      : 5;
+    const bitRateScore = probe.bitRateKbps > 0 ? Math.min(10, Math.max(2, probe.bitRateKbps / 450)) : 5;
+    const quality = Math.max(0, Math.min(10, (mbSize + resolutionScore + bitRateScore) / 3 + 2));
 
     return {
       contentClarity: Math.max(5, Math.min(9.5, 5 + quality * 0.4)),
@@ -245,11 +266,55 @@ export const analyzeScreenShare = async (
     };
   } catch (error) {
     console.error('Error analyzing screen share:', error);
+    const quality = Math.max(0, Math.min(10, 4 + screenBuffer.length / (1024 * 1024)));
     return {
-      contentClarity: 7,
-      organizationScore: 7,
-      visualAppealScore: 6,
+      contentClarity: Math.max(5, Math.min(9, 5 + quality * 0.35)),
+      organizationScore: Math.max(5, Math.min(9, 5 + quality * 0.33)),
+      visualAppealScore: Math.max(4.5, Math.min(8.5, 4.5 + quality * 0.28)),
     };
+  }
+};
+
+const probeMediaBuffer = async (
+  buffer: Buffer,
+  type: 'audio' | 'video'
+): Promise<MediaProbeResult> => {
+  const ext = type === 'audio' ? 'webm' : 'webm';
+  const tempFile = path.join(RECORDINGS_DIR, `probe-${type}-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`);
+
+  try {
+    await fs.promises.writeFile(tempFile, buffer);
+
+    const { stdout } = await execAsync(
+      `ffprobe -v quiet -print_format json -show_streams -show_format "${tempFile}"`
+    );
+
+    const parsed = JSON.parse(stdout || '{}');
+    const stream = Array.isArray(parsed.streams)
+      ? parsed.streams.find((item: any) => item.codec_type === type) || parsed.streams[0]
+      : undefined;
+    const format = parsed.format || {};
+
+    const durationSeconds = Number(stream?.duration || format.duration || 0) || 0;
+    const bitRateRaw = Number(stream?.bit_rate || format.bit_rate || 0) || 0;
+
+    return {
+      durationSeconds,
+      bitRateKbps: bitRateRaw > 0 ? bitRateRaw / 1000 : 0,
+      width: Number(stream?.width || 0) || undefined,
+      height: Number(stream?.height || 0) || undefined,
+    };
+  } catch (error) {
+    return {
+      durationSeconds: 0,
+      bitRateKbps: 0,
+    };
+  } finally {
+    try {
+      await fs.promises.unlink(tempFile);
+    } catch {
+      // Ignore cleanup errors for ephemeral probe file.
+    }
   }
 };
 

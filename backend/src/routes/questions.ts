@@ -37,7 +37,11 @@ router.post('/questions/generate', authMiddleware, async (req: AuthRequest, res:
     const questions = await generateQuestions(
       session.job_role,
       session.difficulty,
-      numQuestions || 5
+      numQuestions || 5,
+      {
+        interviewType: session.interview_type || 'mixed',
+        companyType: session.company_type || 'startup',
+      }
     );
 
     // Save questions to database

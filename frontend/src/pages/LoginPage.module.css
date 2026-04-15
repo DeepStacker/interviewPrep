@@ -157,6 +157,17 @@
   margin-bottom: 24px;
 }
 
+.configError {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
 .loading {
   display: flex;
   flex-direction: column;

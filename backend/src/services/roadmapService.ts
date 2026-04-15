@@ -345,13 +345,33 @@ const generateWeeklyTasks = (
   return tasks;
 };
 
+const parseJsonValue = <T>(value: unknown, fallback: T): T => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as T;
+  }
+
+  return fallback;
+};
+
 const mapRoadmapRow = (row: any): PreparationRoadmap => ({
   id: row.id,
   userId: row.user_id,
   companyId: row.company_id,
   targetRole: row.target_role,
   difficulty: row.difficulty_level,
-  roadmapContent: JSON.parse(row.roadmap_content || '{}'),
+  roadmapContent: parseJsonValue(row.roadmap_content, {}),
   progressPercentage: row.progress_percentage || 0,
   estimatedDaysToComplete: row.estimated_days_to_complete,
 });

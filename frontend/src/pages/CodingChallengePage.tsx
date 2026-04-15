@@ -13,6 +13,7 @@ export default function CodingChallengePage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchChallenge = async () => {
@@ -31,17 +32,18 @@ export default function CodingChallengePage() {
 
   const handleSubmit = async () => {
     if (!code.trim()) {
-      alert('Please write some code first');
+        setSubmitError('Please write some code first.');
       return;
     }
 
     try {
+        setSubmitError(null);
       setSubmitting(true);
       const response = await codingAPI.submitSolution(parseInt(id!), code, language);
       setResult(response.data?.data ?? response.data);
     } catch (error) {
       console.error('Error submitting code:', error);
-      alert('Error submitting code');
+        setSubmitError('Error submitting code. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -111,6 +113,8 @@ export default function CodingChallengePage() {
           >
             {submitting ? 'Submitting...' : 'Submit Solution'}
           </button>
+
+            {submitError && <p className={styles.errorText}>{submitError}</p>}
 
           {result && (
             <div className={styles.result}>

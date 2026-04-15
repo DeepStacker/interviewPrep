@@ -15,6 +15,12 @@ const QuestionSetupPage: React.FC = () => {
     jobRole: 'Frontend Developer',
     companyType: 'startup',
     difficulty: 'medium',
+    interviewType: 'mixed' as
+      | 'mixed'
+      | 'technical'
+      | 'behavioral'
+      | 'system_design'
+      | 'rapid_fire',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,6 +49,14 @@ const QuestionSetupPage: React.FC = () => {
     { value: 'medium', label: 'Medium', description: 'Intermediate level' },
     { value: 'hard', label: 'Hard', description: 'Expert level' },
   ];
+
+  const interviewTypes = [
+    { value: 'mixed', label: 'Mixed', description: 'Balanced technical + behavioral + design' },
+    { value: 'technical', label: 'Technical', description: 'Problem solving and implementation depth' },
+    { value: 'behavioral', label: 'Behavioral', description: 'Communication, ownership, leadership' },
+    { value: 'system_design', label: 'System Design', description: 'Architecture and scalability focus' },
+    { value: 'rapid_fire', label: 'Rapid Fire', description: 'Fast short questions under time pressure' },
+  ] as const;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,6 +178,44 @@ const QuestionSetupPage: React.FC = () => {
               </div>
             </div>
 
+            <div className={styles.formGroup}>
+              <label>Interview Type *</label>
+              <div className={styles.difficultyGrid}>
+                {interviewTypes.map((type) => (
+                  <label
+                    key={type.value}
+                    className={`${styles.difficultyCard} ${
+                      formData.interviewType === type.value
+                        ? styles.difficultyCardActive
+                        : ''
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="interviewType"
+                      value={type.value}
+                      checked={formData.interviewType === type.value}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          interviewType: e.target.value as
+                            | 'mixed'
+                            | 'technical'
+                            | 'behavioral'
+                            | 'system_design'
+                            | 'rapid_fire',
+                        })
+                      }
+                    />
+                    <div className={styles.difficultyContent}>
+                      <span className={styles.difficultyTitle}>{type.label}</span>
+                      <span className={styles.difficultyDesc}>{type.description}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {error && <div className={styles.error}>{error}</div>}
 
             <button
@@ -182,7 +234,7 @@ const QuestionSetupPage: React.FC = () => {
           </form>
 
           <div className={styles.info}>
-            <p>💡 You'll get 5-10 AI-generated questions tailored to your selection</p>
+            <p>💡 You will get a mode-specific interview set with validation, keyboard shortcuts, and integrity checks.</p>
           </div>
         </div>
       </main>

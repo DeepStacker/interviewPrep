@@ -58,6 +58,15 @@
   margin-bottom: 50px;
 }
 
+.error {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #fee2e2;
+  color: #991b1b;
+  font-weight: 600;
+}
+
 .companySection h2 {
   font-size: 22px;
   color: #111827;

@@ -167,6 +167,12 @@
   cursor: not-allowed;
 }
 
+.errorText {
+  margin: 0;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
 .result {
   margin-top: 20px;
   padding: 20px;

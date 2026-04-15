@@ -12,16 +12,34 @@ router.post('/sessions', authMiddleware, async (req: AuthRequest, res: Response)
       return;
     }
 
-    const { jobRole, companyType, difficulty } = req.body;
+    const { jobRole, companyType, difficulty, interviewType } = req.body;
 
     if (!jobRole || !difficulty) {
       res.status(400).json({ error: 'jobRole and difficulty are required' });
       return;
     }
 
+    const normalizedInterviewType =
+      typeof interviewType === 'string' && interviewType.trim().length > 0
+        ? interviewType.trim().toLowerCase()
+        : 'mixed';
+
+    const allowedInterviewTypes = new Set([
+      'mixed',
+      'technical',
+      'behavioral',
+      'system_design',
+      'rapid_fire',
+    ]);
+
+    if (!allowedInterviewTypes.has(normalizedInterviewType)) {
+      res.status(400).json({ error: 'invalid interviewType' });
+      return;
+    }
+
     const result = await pool.query(
-      'INSERT INTO sessions (user_id, job_role, company_type, difficulty, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [req.userId, jobRole, companyType, difficulty, 'in_progress']
+      'INSERT INTO sessions (user_id, job_role, company_type, difficulty, interview_type, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+      [req.userId, jobRole, companyType, difficulty, normalizedInterviewType, 'in_progress']
     );
 
     res.status(201).json(mapSessionRow(result.rows[0]));
@@ -112,6 +130,7 @@ const mapSessionRow = (row: any) => ({
   jobRole: row.job_role,
   companyType: row.company_type,
   difficulty: row.difficulty,
+  interviewType: row.interview_type || 'mixed',
   totalScore: row.total_score,
   startedAt: row.started_at,
   completedAt: row.completed_at,

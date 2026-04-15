@@ -308,16 +308,36 @@ const recommendTargetCompanies = (resume: Resume): string[] => {
   return ['Google', 'Amazon', 'Meta'];
 };
 
+const parseJsonValue = <T>(value: unknown, fallback: T): T => {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === 'string') {
+    try {
+      return JSON.parse(value) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value as T;
+  }
+
+  return fallback;
+};
+
 const mapResumeRow = (row: any): Resume => ({
   id: row.id,
   userId: row.user_id,
   title: row.title,
   summary: row.summary,
-  experience: JSON.parse(row.experience || '[]'),
-  education: JSON.parse(row.education || '[]'),
-  skills: JSON.parse(row.skills || '[]'),
-  projects: JSON.parse(row.projects || '[]'),
-  certifications: JSON.parse(row.certifications || '[]'),
+  experience: parseJsonValue(row.experience, []),
+  education: parseJsonValue(row.education, []),
+  skills: parseJsonValue(row.skills, []),
+  projects: parseJsonValue(row.projects, []),
+  certifications: parseJsonValue(row.certifications, []),
   resumeScore: row.resume_score,
   aiSuggestions: row.ai_suggestions,
   optimizedContent: row.optimized_content,

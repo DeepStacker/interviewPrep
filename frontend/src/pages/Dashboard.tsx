@@ -13,6 +13,11 @@ interface DashboardStats {
   roleStats: any[];
 }
 
+const toFiniteNumber = (value: unknown): number | null => {
+  const numeric = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
@@ -154,9 +159,12 @@ const Dashboard: React.FC = () => {
                         <span className={styles.badge}>
                           {session.difficulty}
                         </span>
-                        {session.totalScore && (
-                          <p className={styles.score}>{session.totalScore.toFixed(1)}/10</p>
-                        )}
+                        {(() => {
+                          const totalScore = toFiniteNumber(session.totalScore);
+                          return totalScore !== null ? (
+                            <p className={styles.score}>{totalScore.toFixed(1)}/10</p>
+                          ) : null;
+                        })()}
                       </div>
                     </div>
                   ))}

@@ -12,25 +12,56 @@ router.post('/mock-interview/schedule', authMiddleware, async (req: AuthRequest,
       return;
     }
 
-    const { companyId, interviewType, scheduledAt } = req.body;
+    const { companyId, interviewType, scheduledAt, type, scheduledDate, interviewerUserId } = req.body;
 
-    if (!companyId || !interviewType || !scheduledAt) {
+    // Accept legacy frontend field names while preserving canonical API fields.
+    const normalizedInterviewType = interviewType || type;
+    const normalizedScheduledAt = scheduledAt || scheduledDate;
+
+    if (!companyId || !normalizedInterviewType || !normalizedScheduledAt) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
     }
 
     const result = await pool.query(
       `INSERT INTO mock_interviews (
-        interviewee_id, company_id, interview_type, scheduled_at, status
-      ) VALUES ($1, $2, $3, $4, 'pending')
+        interviewee_id, interviewer_id, company_id, interview_type, scheduled_at, status
+      ) VALUES ($1, $2, $3, $4, $5, 'pending')
       RETURNING *`,
-      [req.userId, companyId, interviewType, new Date(scheduledAt)]
+      [req.userId, interviewerUserId || null, companyId, normalizedInterviewType, new Date(normalizedScheduledAt)]
     );
 
     res.status(201).json(mapMockInterviewRow(result.rows[0]));
   } catch (error) {
     console.error('Schedule mock interview error:', error);
     res.status(500).json({ error: 'Failed to schedule interview' });
+  }
+});
+
+// Get one mock interview by id
+router.get('/mock-interview/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.userId) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+
+    const result = await pool.query(
+      `SELECT mi.* FROM mock_interviews mi
+       WHERE mi.id = $1 AND (mi.interviewee_id = $2 OR mi.interviewer_id = $2)
+       LIMIT 1`,
+      [req.params.id, req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Interview not found' });
+      return;
+    }
+
+    res.json(mapMockInterviewRow(result.rows[0]));
+  } catch (error) {
+    console.error('Get mock interview by id error:', error);
+    res.status(500).json({ error: 'Failed to get interview' });
   }
 });
 
