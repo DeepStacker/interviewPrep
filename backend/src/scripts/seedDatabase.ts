@@ -77,6 +77,65 @@ const CODING_CHALLENGES = [
   { title: 'Binary Tree Maximum Path Sum Hard', difficulty: 'hard', category: 'Trees', problem_statement: 'Max path sum in binary tree.', constraints: 'O(n) time', company_name: 'Google', acceptance_rate: 37.3 },
 ];
 
+const TEST_CASE_BANK: Record<
+  string,
+  Array<{ input: string; output: string; isSample: boolean; explanation: string }>
+> = {
+  'Two Sum': [
+    { input: '4\n2 7 11 15\n9\n', output: '0 1\n', isSample: true, explanation: '2 + 7 = 9' },
+    { input: '3\n3 2 4\n6\n', output: '1 2\n', isSample: true, explanation: '2 + 4 = 6' },
+    { input: '2\n3 3\n6\n', output: '0 1\n', isSample: false, explanation: 'Duplicate values are valid' },
+  ],
+  'Valid Parentheses': [
+    { input: '()[]{}\n', output: 'true\n', isSample: true, explanation: 'All pairs close in order' },
+    { input: '(]\n', output: 'false\n', isSample: true, explanation: 'Mismatched bracket types' },
+    { input: '([{}])\n', output: 'true\n', isSample: false, explanation: 'Nested valid sequence' },
+  ],
+  'Merge Sorted Array': [
+    { input: '3\n1 2 3\n3\n2 5 6\n', output: '1 2 2 3 5 6\n', isSample: true, explanation: 'Classic merge operation' },
+    { input: '1\n1\n0\n\n', output: '1\n', isSample: true, explanation: 'Second array is empty' },
+    { input: '0\n\n2\n4 5\n', output: '4 5\n', isSample: false, explanation: 'First array is empty' },
+  ],
+  'Best Time to Buy/Sell Stock': [
+    { input: '6\n7 1 5 3 6 4\n', output: '5\n', isSample: true, explanation: 'Buy at 1, sell at 6' },
+    { input: '5\n7 6 4 3 1\n', output: '0\n', isSample: true, explanation: 'No profitable transaction' },
+    { input: '7\n2 4 1 7 5 3 6\n', output: '6\n', isSample: false, explanation: 'Best spread is 1 to 7' },
+  ],
+  'Maximum Subarray': [
+    { input: '9\n-2 1 -3 4 -1 2 1 -5 4\n', output: '6\n', isSample: true, explanation: 'Subarray [4,-1,2,1]' },
+    { input: '1\n1\n', output: '1\n', isSample: true, explanation: 'Single value input' },
+    { input: '3\n-3 -2 -1\n', output: '-1\n', isSample: false, explanation: 'All negative values' },
+  ],
+  'Reverse String': [
+    { input: 'hello\n', output: 'olleh\n', isSample: true, explanation: 'Reverse all characters' },
+    { input: 'InterviewPrep\n', output: 'perPweivretnI\n', isSample: true, explanation: 'Mixed case characters' },
+    { input: 'a\n', output: 'a\n', isSample: false, explanation: 'Single character remains same' },
+  ],
+  'Palindrome Number': [
+    { input: '121\n', output: 'true\n', isSample: true, explanation: 'Reads same both directions' },
+    { input: '-121\n', output: 'false\n', isSample: true, explanation: 'Negative number is not palindrome' },
+    { input: '10\n', output: 'false\n', isSample: false, explanation: 'Leading zero mismatch after reverse' },
+  ],
+  'Missing Number': [
+    { input: '3\n3 0 1\n', output: '2\n', isSample: true, explanation: 'Range is 0..3' },
+    { input: '2\n0 1\n', output: '2\n', isSample: true, explanation: 'Missing upper bound value' },
+    { input: '9\n9 6 4 2 3 5 7 0 1\n', output: '8\n', isSample: false, explanation: 'Unordered sequence with one gap' },
+  ],
+  'Longest Substring Without Repeating': [
+    { input: 'abcabcbb\n', output: '3\n', isSample: true, explanation: 'Longest is abc' },
+    { input: 'bbbbb\n', output: '1\n', isSample: true, explanation: 'Single repeated character' },
+    { input: 'pwwkew\n', output: '3\n', isSample: false, explanation: 'Longest is wke' },
+  ],
+  'Container With Most Water': [
+    { input: '9\n1 8 6 2 5 4 8 3 7\n', output: '49\n', isSample: true, explanation: 'Indices 1 and 8 produce max area' },
+    { input: '2\n1 1\n', output: '1\n', isSample: true, explanation: 'Only one possible container' },
+    { input: '6\n4 3 2 1 4 5\n', output: '20\n', isSample: false, explanation: 'Best container spans edges with taller right wall' },
+  ],
+};
+
+const buildCodingDescription = (title: string, problemStatement: string): string =>
+  `${problemStatement}\n\nExecution contract:\n1) Read all required values from standard input (stdin).\n2) Print only the final answer to standard output (stdout).\n3) Follow the sample input/output format shown in test cases for this challenge.\n\nProblem: ${title}`;
+
 // 15+ System Design problems
 const SYSTEM_DESIGN_PROBLEMS = [
   { title: 'Design Twitter', difficulty: 'hard', description: 'Design Twitter with tweets, followers, feed.', requirements: 'Post, follow, feed, search', constraints: 'Millions of users', estimated_time_minutes: 60, company_name: 'Meta' },
@@ -119,13 +178,62 @@ export const seedDatabase = async () => {
       const company_id = companyMap.get(challenge.company_name);
       if (company_id) {
         await pool.query(
-          'INSERT INTO coding_challenges (title, difficulty, category, problem_statement, constraints, company_id, acceptance_rate) VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (title) DO NOTHING',
-          [challenge.title, challenge.difficulty, challenge.category, challenge.problem_statement, challenge.constraints, company_id, challenge.acceptance_rate]
+          `INSERT INTO coding_challenges
+            (title, difficulty, category, description, problem_statement, constraints, company_id, acceptance_rate)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+           ON CONFLICT (title) DO UPDATE
+           SET
+             difficulty = EXCLUDED.difficulty,
+             category = EXCLUDED.category,
+             description = EXCLUDED.description,
+             problem_statement = EXCLUDED.problem_statement,
+             constraints = EXCLUDED.constraints,
+             company_id = EXCLUDED.company_id,
+             acceptance_rate = EXCLUDED.acceptance_rate`,
+          [
+            challenge.title,
+            challenge.difficulty,
+            challenge.category,
+            buildCodingDescription(challenge.title, challenge.problem_statement),
+            challenge.problem_statement,
+            challenge.constraints,
+            company_id,
+            challenge.acceptance_rate,
+          ]
         );
         challengeCount++;
       }
     }
     console.log(`✅ Seeded ${challengeCount} coding challenges`);
+
+    const challengesResult = await pool.query('SELECT id, title FROM coding_challenges');
+    const challengeIdByTitle = new Map(challengesResult.rows.map((r) => [r.title, r.id]));
+
+    let testCaseCount = 0;
+    for (const [title, testCases] of Object.entries(TEST_CASE_BANK)) {
+      const challengeId = challengeIdByTitle.get(title);
+      if (!challengeId) {
+        continue;
+      }
+
+      await pool.query('DELETE FROM test_cases WHERE challenge_id = $1', [challengeId]);
+
+      for (const testCase of testCases) {
+        await pool.query(
+          `INSERT INTO test_cases (challenge_id, input_data, expected_output, is_sample, explanation)
+           VALUES ($1, $2, $3, $4, $5)`,
+          [
+            challengeId,
+            testCase.input,
+            testCase.output,
+            testCase.isSample,
+            testCase.explanation,
+          ]
+        );
+        testCaseCount++;
+      }
+    }
+    console.log(`✅ Seeded ${testCaseCount} coding test cases`);
 
     // Seed system design problems
     for (const problem of SYSTEM_DESIGN_PROBLEMS) {

@@ -4,6 +4,11 @@ import { useCodingStore } from '../stores/codingStore';
 import { codingAPI } from '../services/api';
 import styles from './CodingChallengesPage.module.css';
 
+const toNumberOrZero = (value: unknown): number => {
+  const parsed = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export default function CodingChallengesPage() {
   const navigate = useNavigate();
   const store = useCodingStore();
@@ -95,7 +100,7 @@ export default function CodingChallengesPage() {
               </div>
               <p className={styles.category}>{challenge.category}</p>
               <div className={styles.stats}>
-                <span>{(challenge.acceptance_rate ?? challenge.acceptanceRate ?? 0).toFixed(1)}% Accept</span>
+                <span>{toNumberOrZero(challenge.acceptance_rate ?? challenge.acceptanceRate).toFixed(1)}% Accept</span>
               </div>
             </div>
           ))}

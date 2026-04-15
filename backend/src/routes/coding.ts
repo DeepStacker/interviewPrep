@@ -4,6 +4,7 @@ import {
   searchCodingChallenges,
   getChallengeById,
   submitCodeSolution,
+  runCodeAgainstChallenge,
   getUserChallengeStats,
   getChallengesByCompany,
   getUserSubmissions,
@@ -70,7 +71,55 @@ router.post('/coding/submit', authMiddleware, async (req: AuthRequest, res: Resp
     res.status(201).json(submission);
   } catch (error) {
     console.error('Submit code error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to submit code';
+
+    if (
+      message.includes('No test cases configured') ||
+      message.includes('Unsupported language') ||
+      message.includes('JUDGE0_URL is not configured') ||
+      message.includes('Code blocked by safety policy')
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
+
     res.status(500).json({ error: 'Failed to submit code' });
+  }
+});
+
+// Run code against sample tests or custom input (without saving submission)
+router.post('/coding/run', authMiddleware, async (req: AuthRequest, res: Response) => {
+  try {
+    const { challengeId, code, language, input } = req.body;
+
+    if (!challengeId || !code || !language) {
+      res.status(400).json({ error: 'Missing required fields' });
+      return;
+    }
+
+    const runResult = await runCodeAgainstChallenge(
+      Number(challengeId),
+      String(code),
+      String(language),
+      typeof input === 'string' ? input : undefined
+    );
+
+    res.json(runResult);
+  } catch (error) {
+    console.error('Run code error:', error);
+    const message = error instanceof Error ? error.message : 'Failed to run code';
+
+    if (
+      message.includes('No sample test cases configured') ||
+      message.includes('Unsupported language') ||
+      message.includes('JUDGE0_URL is not configured') ||
+      message.includes('Code blocked by safety policy')
+    ) {
+      res.status(400).json({ error: message });
+      return;
+    }
+
+    res.status(500).json({ error: 'Failed to run code' });
   }
 });
 

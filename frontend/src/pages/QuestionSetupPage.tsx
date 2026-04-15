@@ -20,7 +20,15 @@ const QuestionSetupPage: React.FC = () => {
       | 'technical'
       | 'behavioral'
       | 'system_design'
-      | 'rapid_fire',
+      | 'rapid_fire'
+      | 'math_reasoning'
+      | 'game_challenge',
+    practiceTrack: 'interview' as
+      | 'interview'
+      | 'coding'
+      | 'system_design'
+      | 'math_reasoning'
+      | 'game_challenge',
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +64,22 @@ const QuestionSetupPage: React.FC = () => {
     { value: 'behavioral', label: 'Behavioral', description: 'Communication, ownership, leadership' },
     { value: 'system_design', label: 'System Design', description: 'Architecture and scalability focus' },
     { value: 'rapid_fire', label: 'Rapid Fire', description: 'Fast short questions under time pressure' },
+    { value: 'math_reasoning', label: 'Math & Reasoning', description: 'Analytical estimation and numerical reasoning' },
+    { value: 'game_challenge', label: 'Game Challenge', description: 'Gamified scenario and strategy questions' },
   ] as const;
+
+  const practiceTracks = [
+    { value: 'interview', label: 'Interview Drill', description: 'Structured Q&A with behavior analysis' },
+    { value: 'coding', label: 'Coding Practice', description: 'Algorithmic and implementation challenges' },
+    { value: 'system_design', label: 'System Design', description: 'Architecture and trade-off exercises' },
+    { value: 'math_reasoning', label: 'Math & Reasoning', description: 'Analytical and numerical reasoning tasks' },
+    { value: 'game_challenge', label: 'Game Challenge', description: 'Gamified strategy and decision scenarios' },
+  ] as const;
+
+  const isInterviewFlow =
+    formData.practiceTrack === 'interview' ||
+    formData.practiceTrack === 'math_reasoning' ||
+    formData.practiceTrack === 'game_challenge';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,8 +87,29 @@ const QuestionSetupPage: React.FC = () => {
       setIsLoading(true);
       setError(null);
 
+      if (formData.practiceTrack === 'coding') {
+        navigate('/coding');
+        return;
+      }
+
+      if (formData.practiceTrack === 'system_design') {
+        navigate('/system-design');
+        return;
+      }
+
+      const derivedInterviewType =
+        formData.practiceTrack === 'math_reasoning' ||
+        formData.practiceTrack === 'game_challenge'
+          ? formData.practiceTrack
+          : formData.interviewType;
+
       // Create session
-      const response = await sessionsAPI.create(formData);
+      const response = await sessionsAPI.create({
+        jobRole: formData.jobRole,
+        companyType: formData.companyType,
+        difficulty: formData.difficulty,
+        interviewType: derivedInterviewType,
+      });
       const session = response.data;
 
       setCurrentSession(session);
@@ -98,6 +142,42 @@ const QuestionSetupPage: React.FC = () => {
           </div>
 
           <form onSubmit={handleSubmit} className={styles.form}>
+            <div className={styles.formGroup}>
+              <label>Practice Track *</label>
+              <div className={styles.trackGrid}>
+                {practiceTracks.map((track) => (
+                  <label
+                    key={track.value}
+                    className={`${styles.trackCard} ${
+                      formData.practiceTrack === track.value ? styles.trackCardActive : ''
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="practiceTrack"
+                      value={track.value}
+                      checked={formData.practiceTrack === track.value}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          practiceTrack: e.target.value as
+                            | 'interview'
+                            | 'coding'
+                            | 'system_design'
+                            | 'math_reasoning'
+                            | 'game_challenge',
+                        })
+                      }
+                    />
+                    <div className={styles.trackContent}>
+                      <span className={styles.trackTitle}>{track.label}</span>
+                      <span className={styles.trackDesc}>{track.description}</span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             {/* Job Role Selection */}
             <div className={styles.formGroup}>
               <label>Job Role *</label>
@@ -178,43 +258,54 @@ const QuestionSetupPage: React.FC = () => {
               </div>
             </div>
 
-            <div className={styles.formGroup}>
-              <label>Interview Type *</label>
-              <div className={styles.difficultyGrid}>
-                {interviewTypes.map((type) => (
-                  <label
-                    key={type.value}
-                    className={`${styles.difficultyCard} ${
-                      formData.interviewType === type.value
-                        ? styles.difficultyCardActive
-                        : ''
-                    }`}
-                  >
-                    <input
-                      type="radio"
-                      name="interviewType"
-                      value={type.value}
-                      checked={formData.interviewType === type.value}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          interviewType: e.target.value as
-                            | 'mixed'
-                            | 'technical'
-                            | 'behavioral'
-                            | 'system_design'
-                            | 'rapid_fire',
-                        })
-                      }
-                    />
-                    <div className={styles.difficultyContent}>
-                      <span className={styles.difficultyTitle}>{type.label}</span>
-                      <span className={styles.difficultyDesc}>{type.description}</span>
-                    </div>
-                  </label>
-                ))}
+            {isInterviewFlow ? (
+              <div className={styles.formGroup}>
+                <label>Interview Type *</label>
+                <div className={styles.difficultyGrid}>
+                  {interviewTypes.map((type) => (
+                    <label
+                      key={type.value}
+                      className={`${styles.difficultyCard} ${
+                        formData.interviewType === type.value
+                          ? styles.difficultyCardActive
+                          : ''
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="interviewType"
+                        value={type.value}
+                        checked={formData.interviewType === type.value}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            interviewType: e.target.value as
+                              | 'mixed'
+                              | 'technical'
+                              | 'behavioral'
+                              | 'system_design'
+                              | 'rapid_fire'
+                              | 'math_reasoning'
+                              | 'game_challenge',
+                          })
+                        }
+                      />
+                      <div className={styles.difficultyContent}>
+                        <span className={styles.difficultyTitle}>{type.label}</span>
+                        <span className={styles.difficultyDesc}>{type.description}</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className={styles.formGroup}>
+                <label>Track Configuration</label>
+                <p className={styles.hintText}>
+                  This track has a dedicated flow and bypasses interview question-mode configuration.
+                </p>
+              </div>
+            )}
 
             {error && <div className={styles.error}>{error}</div>}
 
@@ -227,7 +318,12 @@ const QuestionSetupPage: React.FC = () => {
                 <div className={styles.spinner}></div>
               ) : (
                 <>
-                  Start Interview <ArrowRight size={20} />
+                  {formData.practiceTrack === 'coding'
+                    ? 'Start Coding Practice'
+                    : formData.practiceTrack === 'system_design'
+                    ? 'Start Design Practice'
+                    : 'Start Interview'}{' '}
+                  <ArrowRight size={20} />
                 </>
               )}
             </button>

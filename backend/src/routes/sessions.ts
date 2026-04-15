@@ -30,6 +30,8 @@ router.post('/sessions', authMiddleware, async (req: AuthRequest, res: Response)
       'behavioral',
       'system_design',
       'rapid_fire',
+      'math_reasoning',
+      'game_challenge',
     ]);
 
     if (!allowedInterviewTypes.has(normalizedInterviewType)) {

@@ -187,6 +187,8 @@ const normalizeIntegritySignals = (signals: any) => {
     tabSwitches: safeNumber(signals?.tabSwitches),
     windowBlurCount: safeNumber(signals?.windowBlurCount),
     pasteCount: safeNumber(signals?.pasteCount),
+    copyCutCount: safeNumber(signals?.copyCutCount),
+    fullscreenExits: safeNumber(signals?.fullscreenExits),
     elapsedSeconds: safeNumber(signals?.elapsedSeconds),
     keystrokes: safeNumber(signals?.keystrokes),
   };
@@ -196,6 +198,8 @@ const getIntegrityFlags = (signals: {
   tabSwitches: number;
   windowBlurCount: number;
   pasteCount: number;
+  copyCutCount: number;
+  fullscreenExits: number;
   elapsedSeconds: number;
   keystrokes: number;
 }) => {
@@ -203,6 +207,12 @@ const getIntegrityFlags = (signals: {
 
   if (signals.pasteCount >= 3) {
     flags.push('heavy_paste_activity');
+  }
+  if (signals.copyCutCount > 0) {
+    flags.push('clipboard_shortcut_attempt');
+  }
+  if (signals.fullscreenExits >= 2) {
+    flags.push('focus_mode_exits');
   }
   if (signals.tabSwitches >= 3 || signals.windowBlurCount >= 3) {
     flags.push('multiple_focus_switches');

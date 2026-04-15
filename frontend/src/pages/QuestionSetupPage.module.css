@@ -4,15 +4,15 @@
 }
 
 .content {
-  max-width: 600px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 40px 20px;
+  padding: 48px 24px;
 }
 
 .setupCard {
   background: white;
   border-radius: 20px;
-  padding: 40px;
+  padding: 48px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
   animation: slideUp 0.5s ease-out;
 }
@@ -70,13 +70,66 @@
 .form {
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 32px;
 }
 
 .formGroup {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.trackGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.trackCard {
+  position: relative;
+  cursor: pointer;
+}
+
+.trackCard input {
+  display: none;
+}
+
+.trackContent {
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  padding: 14px;
+  background: #ffffff;
+  transition: all 0.25s ease;
+}
+
+.trackCard:hover .trackContent {
+  border-color: #667eea;
+  box-shadow: 0 8px 18px rgba(102, 126, 234, 0.12);
+}
+
+.trackCardActive .trackContent {
+  border-color: #667eea;
+  background: #eef2ff;
+}
+
+.trackTitle {
+  display: block;
+  font-weight: 700;
+  font-size: 14px;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.trackDesc {
+  font-size: 12px;
+  color: #4b5563;
+  line-height: 1.35;
+}
+
+.hintText {
+  margin: 0;
+  font-size: 12px;
+  color: #6b7280;
 }
 
 .formGroup label {
@@ -137,7 +190,7 @@
 
 .difficultyGrid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -243,6 +296,16 @@
   font-size: 14px;
 }
 
+@media (max-width: 1100px) {
+  .difficultyGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trackGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 640px) {
   .setupCard {
     padding: 24px;
@@ -253,6 +316,10 @@
   }
 
   .difficultyGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .trackGrid {
     grid-template-columns: 1fr;
   }
 

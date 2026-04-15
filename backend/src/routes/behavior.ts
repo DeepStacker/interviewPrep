@@ -10,6 +10,8 @@ import {
   analyzeVoice,
   analyzeBehavior,
   calculateResponseTime,
+  saveVideoRecording,
+  saveScreenRecording,
 } from '../services/mediaService';
 import pool from '../config/database';
 
@@ -37,16 +39,47 @@ router.post('/behavior/submit', authMiddleware, async (req: AuthRequest, res: Re
       return;
     }
 
+    const ownership = await pool.query(
+      `SELECT a.id, q.session_id
+       FROM answers a
+       JOIN questions q ON q.id = a.question_id
+       JOIN sessions s ON s.id = q.session_id
+       WHERE a.id = $1 AND s.user_id = $2`,
+      [answerId, req.userId]
+    );
+
+    if (ownership.rows.length === 0) {
+      res.status(404).json({ error: 'Answer not found' });
+      return;
+    }
+
+    const sessionId = ownership.rows[0].session_id as number;
+
+    const audioBuffer = decodeMediaPayload(audioData);
+    const videoBuffer = decodeMediaPayload(videoData);
+    const screenBuffer = decodeMediaPayload(screenData);
+
+    let videoRecordingUrl: string | undefined;
+    let screenRecordingUrl: string | undefined;
+
+    if (videoBuffer.length > 0) {
+      videoRecordingUrl = await saveVideoRecording(videoBuffer, sessionId, answerId);
+    }
+
+    if (screenBuffer.length > 0) {
+      screenRecordingUrl = await saveScreenRecording(screenBuffer, sessionId, answerId);
+    }
+
     // Analyze voice/answer data
     const voiceAnalysis = await analyzeVoice(
-      audioData ? Buffer.from(audioData) : Buffer.from([]),
+      audioBuffer,
       userAnswer
     );
 
     // Analyze video behavior (if video provided)
     let behaviorAnalysis = null;
-    if (videoData) {
-      behaviorAnalysis = await analyzeBehavior(Buffer.from(videoData));
+    if (videoBuffer.length > 0) {
+      behaviorAnalysis = await analyzeBehavior(videoBuffer);
     }
 
     // Calculate response time
@@ -80,6 +113,8 @@ router.post('/behavior/submit', authMiddleware, async (req: AuthRequest, res: Re
       fillerWordsCount: voiceAnalysis.fillerWords.count,
       fillerWordPercentage: voiceAnalysis.fillerWords.percentage,
       responseTimeSeconds: responseTime,
+      videoRecordingUrl,
+      screenRecordingUrl,
       audioTranscript: voiceAnalysis.transcript,
       overallBehaviorScore: calculateOverallBehaviorScore({
         confidence: behaviorAnalysis?.confidence || voiceAnalysis.confidence,
@@ -329,5 +364,18 @@ const mapInsightsRow = (row: any) => ({
   overallPresentationScore: row.overall_presentation_score,
   recommendations: row.recommendations,
 });
+
+const decodeMediaPayload = (payload: unknown): Buffer => {
+  if (typeof payload !== 'string' || payload.trim().length === 0) {
+    return Buffer.from([]);
+  }
+
+  const raw = payload.includes(',') ? payload.split(',')[1] : payload;
+  try {
+    return Buffer.from(raw, 'base64');
+  } catch {
+    return Buffer.from([]);
+  }
+};
 
 export default router;

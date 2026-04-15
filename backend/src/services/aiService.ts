@@ -17,6 +17,31 @@ export interface EvaluationResult {
   idealAnswer: string;
 }
 
+export interface CoachingFocusArea {
+  title: string;
+  whyItMatters: string;
+  action: string;
+}
+
+export interface PersonalizedCoachingPlan {
+  summary: string;
+  focusAreas: CoachingFocusArea[];
+  weeklyPlan: string[];
+  nextSessionPrompt: string;
+}
+
+export interface PersonalizedCoachingInput {
+  jobRoles: Array<{ role: string; averageScore: number; sessions: number }>;
+  interviewTypeStats: Array<{ interviewType: string; sessions: number }>;
+  recentAverageScore: number;
+  completionRate: number;
+  monitoringCoverage: number;
+  integrityRiskRate: number;
+  codingAcceptanceRate: number;
+  codingAverageScore: number;
+  recentWeakSignals: string[];
+}
+
 export const generateQuestions = async (
   role: string,
   difficulty: string,
@@ -27,7 +52,8 @@ export const generateQuestions = async (
   const companyType = context?.companyType || 'startup';
   const systemPrompt = `You are an expert interview coach specializing in ${role} positions. Generate interview questions at ${difficulty} difficulty level.
   Interview type: ${interviewType}. Company context: ${companyType}.
-  Return questions as a JSON array with exactly ${numberOfQuestions} questions in this format: {"questions": [{"text": "question 1"}, {"text": "question 2"}, ...]}`;
+  Return questions as a JSON array with exactly ${numberOfQuestions} questions in this format: {"questions": [{"text": "question 1"}, {"text": "question 2"}, ...]}.
+  Make each question practical, evaluable, and specific (avoid generic one-liners).`;
 
   try {
     const prompt = `Generate ${numberOfQuestions} ${difficulty} level ${interviewType} interview questions for a ${role} position at a ${companyType} company.`;
@@ -71,6 +97,39 @@ export const evaluateAnswer = async (
   } catch (error) {
     console.error('Error evaluating answer:', error);
     return buildFallbackEvaluation(role, question, userAnswer);
+  }
+};
+
+export const generatePersonalizedCoaching = async (
+  input: PersonalizedCoachingInput
+): Promise<PersonalizedCoachingPlan> => {
+  const systemPrompt = `You are an elite interview performance coach.
+  Given real user metrics, create a practical coaching plan.
+  Return ONLY valid JSON (no markdown, no extra text) in this exact structure:
+  {
+    "summary": "short diagnostic summary",
+    "focusAreas": [
+      {"title": "...", "whyItMatters": "...", "action": "..."}
+    ],
+    "weeklyPlan": ["...", "...", "...", "..."],
+    "nextSessionPrompt": "..."
+  }
+  Rules:
+  - 3 to 4 focusAreas
+  - weeklyPlan must contain 4 concrete steps
+  - Actions must be measurable and realistic`;
+
+  try {
+    const prompt = `User metrics:\n${JSON.stringify(input, null, 2)}\n\nGenerate a high-impact plan.`;
+    const content = await getAiResponse(systemPrompt, prompt, {
+      temperature: 0.35,
+      maxTokens: 1200,
+    });
+
+    return parseCoachingPlanFromContent(content, input);
+  } catch (error) {
+    console.error('Error generating personalized coaching:', error);
+    return buildFallbackCoachingPlan(input);
   }
 };
 
@@ -251,6 +310,104 @@ const parseEvaluationFromContent = (content: string): EvaluationResult => {
   };
 };
 
+const parseCoachingPlanFromContent = (
+  content: string,
+  input: PersonalizedCoachingInput
+): PersonalizedCoachingPlan => {
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return buildFallbackCoachingPlan(input);
+  }
+
+  try {
+    const parsed = JSON.parse(jsonMatch[0]);
+    const focusAreas: CoachingFocusArea[] = Array.isArray(parsed.focusAreas)
+      ? parsed.focusAreas
+          .filter(
+            (item: any) =>
+              typeof item?.title === 'string' &&
+              typeof item?.whyItMatters === 'string' &&
+              typeof item?.action === 'string'
+          )
+          .slice(0, 4)
+      : [];
+
+    const weeklyPlan: string[] = Array.isArray(parsed.weeklyPlan)
+      ? parsed.weeklyPlan.filter((step: any) => typeof step === 'string' && step.trim().length > 0).slice(0, 4)
+      : [];
+
+    if (focusAreas.length < 2 || weeklyPlan.length < 2) {
+      return buildFallbackCoachingPlan(input);
+    }
+
+    return {
+      summary: String(parsed.summary || '').trim() || buildFallbackCoachingPlan(input).summary,
+      focusAreas,
+      weeklyPlan,
+      nextSessionPrompt:
+        String(parsed.nextSessionPrompt || '').trim() || buildFallbackCoachingPlan(input).nextSessionPrompt,
+    };
+  } catch {
+    return buildFallbackCoachingPlan(input);
+  }
+};
+
+const buildFallbackCoachingPlan = (
+  input: PersonalizedCoachingInput
+): PersonalizedCoachingPlan => {
+  const weakestRole = [...input.jobRoles].sort((a, b) => a.averageScore - b.averageScore)[0];
+  const weakestInterviewType = [...input.interviewTypeStats].sort((a, b) => a.sessions - b.sessions)[0];
+  const lowCompletion = input.completionRate < 60;
+  const highIntegrityRisk = input.integrityRiskRate >= 20;
+
+  const focusAreas: CoachingFocusArea[] = [
+    {
+      title: 'Structured Answer Depth',
+      whyItMatters: 'Higher-quality structure improves clarity, scoring consistency, and interviewer confidence.',
+      action:
+        'Use a 3-part format (context, decision, measurable impact) for every answer and target 90-140 words.',
+    },
+    {
+      title: 'Targeted Weak-Track Practice',
+      whyItMatters: 'Focused repetition on weaker tracks compounds faster than broad untargeted practice.',
+      action: weakestRole
+        ? `Run 3 sessions this week for ${weakestRole.role} and review score deltas after each session.`
+        : 'Run 3 sessions this week on your lowest-scoring role and review score deltas after each session.',
+    },
+    {
+      title: 'Execution Reliability',
+      whyItMatters: 'Completion and focus discipline correlate strongly with interview performance under pressure.',
+      action: lowCompletion
+        ? 'Finish every started session this week; enforce a 25-minute uninterrupted block per session.'
+        : 'Increase session consistency by scheduling 4 fixed practice slots this week.',
+    },
+  ];
+
+  if (highIntegrityRisk) {
+    focusAreas.push({
+      title: 'Integrity and Focus Control',
+      whyItMatters: 'Reducing context switches increases response coherence and trust in evaluation quality.',
+      action:
+        'Enable fullscreen and monitoring on every session; keep clipboard actions at zero for the next 5 sessions.',
+    });
+  }
+
+  return {
+    summary: `Current trajectory is ${input.recentAverageScore >= 7 ? 'promising' : 'recoverable with focused work'}: average score ${input.recentAverageScore.toFixed(
+      1
+    )}, completion ${input.completionRate.toFixed(1)}%, coding acceptance ${input.codingAcceptanceRate.toFixed(1)}%.`,
+    focusAreas,
+    weeklyPlan: [
+      'Day 1-2: Complete two role-specific interview sessions and write a one-line improvement note per question.',
+      'Day 3-4: Solve four coding challenges with one full submit cycle each (run, debug, submit, reflect).',
+      `Day 5: Practice one ${weakestInterviewType?.interviewType || 'mixed'} session with strict focus mode enabled throughout.`,
+      'Day 6-7: Review your last 5 answers, rewrite the two lowest-scoring responses, and reattempt similar questions.',
+    ],
+    nextSessionPrompt:
+      'Start a medium-difficulty session now and optimize for one goal only: stronger trade-off explanation with measurable outcomes.',
+  };
+};
+
 const buildFallbackQuestions = (
   role: string,
   difficulty: string,
@@ -288,6 +445,22 @@ const buildFallbackQuestions = (
     `Design a metrics and alerting pipeline for critical product flows.`,
   ];
 
+  const mathReasoningQuestions = [
+    `Estimate the cost and infrastructure footprint to process 5 million ${roleText} events per day with a 99.9% SLA.`,
+    `You have three prioritization options with different risks and impact; walk through your weighted decision framework with numbers.`,
+    `Given a latency budget of 200ms across 4 services, how would you allocate and monitor budgets per hop?`,
+    `How would you reason about experiment sample size and significance before rolling out a feature?`,
+    `A queue grows 8% every hour and consumers process a fixed rate. How do you model and correct system stability?`,
+  ];
+
+  const gameChallengeQuestions = [
+    `You are designing a multiplayer challenge room for ${roleText} practice. What scoring and anti-cheat mechanisms would you implement first?`,
+    `Design a points economy that rewards consistency without enabling easy farming.`,
+    `How would you design fair matchmaking for users with different skills and goals?`,
+    `What telemetry would you capture to detect suspicious behavior in challenge mode?`,
+    `Create a level progression system that balances motivation and actual learning outcomes.`,
+  ];
+
   let baseQuestions: string[];
   if (type === 'technical') {
     baseQuestions = technicalQuestions;
@@ -297,6 +470,10 @@ const buildFallbackQuestions = (
     baseQuestions = systemDesignQuestions;
   } else if (type === 'rapid_fire') {
     baseQuestions = [...technicalQuestions, ...behavioralQuestions].map((q) => `Rapid fire: ${q}`);
+  } else if (type === 'math_reasoning') {
+    baseQuestions = mathReasoningQuestions;
+  } else if (type === 'game_challenge') {
+    baseQuestions = gameChallengeQuestions;
   } else {
     baseQuestions = [...technicalQuestions.slice(0, 4), ...behavioralQuestions.slice(0, 2), ...systemDesignQuestions.slice(0, 2)];
   }

@@ -1,11 +1,16 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Copy, Play, Download } from 'lucide-react';
 import styles from './CodeEditor.module.css';
 
 interface CodeEditorProps {
   language?: string;
+  languageOptions?: Array<{ value: string; label: string }>;
+  onLanguageChange?: (language: string) => void;
   initialCode?: string;
   onCodeChange?: (code: string) => void;
+  onRun?: () => void;
+  isRunning?: boolean;
+  runLabel?: string;
   readOnly?: boolean;
   height?: string;
   theme?: 'light' | 'dark';
@@ -15,8 +20,18 @@ interface CodeEditorProps {
 
 const CodeEditor: React.FC<CodeEditorProps> = ({
   language = 'python',
+  languageOptions = [
+    { value: 'python', label: 'Python 3' },
+    { value: 'javascript', label: 'JavaScript (Node.js)' },
+    { value: 'java', label: 'Java 17' },
+    { value: 'cpp', label: 'C++17' },
+  ],
+  onLanguageChange,
   initialCode = '',
   onCodeChange,
+  onRun,
+  isRunning = false,
+  runLabel = 'Run',
   readOnly = false,
   height = '500px',
   theme = 'dark',
@@ -25,9 +40,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
 }) => {
   const [internalCode, setInternalCode] = useState(initialCode);
   const code = externalCode ?? internalCode;
-  const setCode = externalSetCode ?? setInternalCode;
-  const [output, setOutput] = useState('');
-  const [isRunning, setIsRunning] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const lineCount = useMemo(() => Math.max(code.split('\n').length, 1), [code]);
 
   const handleCodeChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newCode = e.target.value;
@@ -39,14 +54,9 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     onCodeChange?.(newCode);
   };
 
-  const handleRun = async () => {
-    setIsRunning(true);
-    try {
-      setOutput('Local execution is disabled. Use "Submit Solution" to run against real test cases.');
-    } catch (error) {
-      setOutput(`Error: ${(error as Error).message}`);
-    } finally {
-      setIsRunning(false);
+  const handleRun = () => {
+    if (!readOnly) {
+      onRun?.();
     }
   };
 
@@ -64,15 +74,57 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
     document.body.removeChild(element);
   };
 
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+
+      const target = event.currentTarget;
+      const selectionStart = target.selectionStart;
+      const selectionEnd = target.selectionEnd;
+      const updatedCode = `${code.substring(0, selectionStart)}  ${code.substring(selectionEnd)}`;
+
+      if (externalSetCode) {
+        externalSetCode(updatedCode);
+      } else {
+        setInternalCode(updatedCode);
+      }
+      onCodeChange?.(updatedCode);
+
+      requestAnimationFrame(() => {
+        if (textareaRef.current) {
+          const nextCaret = selectionStart + 2;
+          textareaRef.current.selectionStart = nextCaret;
+          textareaRef.current.selectionEnd = nextCaret;
+        }
+      });
+    }
+
+    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+      event.preventDefault();
+      handleRun();
+    }
+  };
+
+  const lineNumbers = useMemo(
+    () => Array.from({ length: lineCount }, (_, idx) => idx + 1).join('\n'),
+    [lineCount]
+  );
+
   return (
     <div className={`${styles.container} ${styles[theme]}`} style={{ height }}>
       <div className={styles.header}>
         <div className={styles.languageSelect}>
-          <select value={language} disabled className={styles.select}>
-            <option value="python">Python</option>
-            <option value="javascript">JavaScript</option>
-            <option value="java">Java</option>
-            <option value="cpp">C++</option>
+          <select
+            value={language}
+            disabled={readOnly}
+            className={styles.select}
+            onChange={(event) => onLanguageChange?.(event.target.value)}
+          >
+            {languageOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -94,20 +146,25 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
           {!readOnly && (
             <button
               onClick={handleRun}
-              disabled={isRunning}
+              disabled={isRunning || !onRun}
               className={`${styles.actionBtn} ${styles.runBtn}`}
             >
               <Play size={18} />
-              {isRunning ? 'Running...' : 'Run'}
+              {isRunning ? 'Running...' : runLabel}
             </button>
           )}
         </div>
       </div>
 
       <div className={styles.editorContainer}>
+        <pre className={styles.gutter} aria-hidden>
+          {lineNumbers}
+        </pre>
         <textarea
+          ref={textareaRef}
           value={code}
           onChange={handleCodeChange}
+          onKeyDown={handleKeyDown}
           readOnly={readOnly}
           className={styles.editor}
           spellCheck="false"
@@ -116,12 +173,10 @@ const CodeEditor: React.FC<CodeEditorProps> = ({
         />
       </div>
 
-      {output && (
-        <div className={styles.output}>
-          <div className={styles.outputHeader}>Output</div>
-          <pre className={styles.outputContent}>{output}</pre>
-        </div>
-      )}
+      <div className={styles.footer}>
+        <span>{lineCount} lines</span>
+        <span>Ctrl/Cmd + Enter to run</span>
+      </div>
     </div>
   );
 };

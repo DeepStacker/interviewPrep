@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { questionsAPI, answersAPI } from '../services/api';
+import { questionsAPI, answersAPI, behaviorAPI } from '../services/api';
 import { useSessionStore, Question, Answer } from '../stores/sessionStore';
 import Navigation from '../components/Navigation';
 import { useAuthStore } from '../stores/authStore';
@@ -27,6 +27,21 @@ const QuestionPage: React.FC = () => {
   const [keystrokes, setKeystrokes] = useState(0);
   const [startedAt] = useState(() => Date.now());
   const recognitionRef = React.useRef<any>(null);
+  const [monitoringEnabled, setMonitoringEnabled] = useState(false);
+  const [monitoringError, setMonitoringError] = useState<string | null>(null);
+  const [copyCutCount, setCopyCutCount] = useState(0);
+  const [fullscreenExits, setFullscreenExits] = useState(0);
+  const [isInFullscreen, setIsInFullscreen] = useState(false);
+  const cameraRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const screenRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const cameraChunksRef = React.useRef<Blob[]>([]);
+  const screenChunksRef = React.useRef<Blob[]>([]);
+  const audioChunksRef = React.useRef<Blob[]>([]);
+  const cameraStreamRef = React.useRef<MediaStream | null>(null);
+  const screenStreamRef = React.useRef<MediaStream | null>(null);
+  const audioStreamRef = React.useRef<MediaStream | null>(null);
+  const [questionShownAt, setQuestionShownAt] = useState(() => new Date().toISOString());
 
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
@@ -35,6 +50,9 @@ const QuestionPage: React.FC = () => {
   const minWords = 8;
   const minChars = 40;
   const answerTooShort = charCount > 0 && (wordCount < minWords || charCount < minChars);
+  const integrityPressure =
+    tabSwitches + windowBlurCount + fullscreenExits + copyCutCount + Math.floor(pasteCount / 2);
+  const strictViolation = integrityPressure >= 8;
 
   useEffect(() => {
     const loadQuestions = async () => {
@@ -79,18 +97,32 @@ const QuestionPage: React.FC = () => {
     };
 
     const onBlur = () => setWindowBlurCount((count) => count + 1);
+    const onFullscreenChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      if (!active) {
+        setFullscreenExits((count) => count + 1);
+      }
+      setIsInFullscreen(active);
+    };
 
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('blur', onBlur);
+    document.addEventListener('fullscreenchange', onFullscreenChange);
 
     return () => {
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('blur', onBlur);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
       if (recognitionRef.current) {
         recognitionRef.current.stop();
       }
+      stopAllStreams();
     };
   }, []);
+
+  useEffect(() => {
+    setQuestionShownAt(new Date().toISOString());
+  }, [currentIndex]);
 
   useEffect(() => {
     setWordCount(answerWords.length);
@@ -144,11 +176,142 @@ const QuestionPage: React.FC = () => {
     recognition.start();
   };
 
+  const requestFullscreenMode = async () => {
+    try {
+      await document.documentElement.requestFullscreen();
+      setIsInFullscreen(true);
+    } catch {
+      setMonitoringError('Fullscreen mode could not be enabled. Continue in standard mode.');
+    }
+  };
+
+  const getPreferredVoice = () => {
+    const voices = window.speechSynthesis.getVoices();
+    const preferredNames = ['Siri', 'Google US English', 'Samantha', 'Alex'];
+    for (const name of preferredNames) {
+      const match = voices.find((voice) => voice.name.includes(name));
+      if (match) {
+        return match;
+      }
+    }
+    return voices.find((voice) => voice.lang.startsWith('en')) || null;
+  };
+
+  const speakQuestion = (text: string) => {
+    const utterance = new SpeechSynthesisUtterance(text);
+    const voice = getPreferredVoice();
+    if (voice) {
+      utterance.voice = voice;
+    }
+    utterance.rate = 0.95;
+    utterance.pitch = 1.05;
+    utterance.volume = 1;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startRecorder = (
+    stream: MediaStream,
+    chunkRef: React.MutableRefObject<Blob[]>,
+    recorderRef: React.MutableRefObject<MediaRecorder | null>,
+    mimeType: string
+  ) => {
+    chunkRef.current = [];
+    const supportsMime = MediaRecorder.isTypeSupported(mimeType);
+    const recorder = supportsMime
+      ? new MediaRecorder(stream, { mimeType })
+      : new MediaRecorder(stream);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        chunkRef.current.push(event.data);
+      }
+    };
+    recorder.start(1000);
+    recorderRef.current = recorder;
+  };
+
+  const enableMonitoring = async () => {
+    try {
+      setMonitoringError(null);
+
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      const micStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+
+      cameraStreamRef.current = camStream;
+      screenStreamRef.current = screenStream;
+      audioStreamRef.current = micStream;
+
+      startRecorder(camStream, cameraChunksRef, cameraRecorderRef, 'video/webm;codecs=vp8,opus');
+      startRecorder(screenStream, screenChunksRef, screenRecorderRef, 'video/webm;codecs=vp8,opus');
+      startRecorder(micStream, audioChunksRef, audioRecorderRef, 'audio/webm;codecs=opus');
+
+      setMonitoringEnabled(true);
+    } catch (error) {
+      setMonitoringError('Camera/screen/audio access denied. Behavior analysis will be limited.');
+      setMonitoringEnabled(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isLoading || !currentQuestion || monitoringEnabled) {
+      return;
+    }
+
+    void enableMonitoring();
+  }, [isLoading, currentQuestion, monitoringEnabled]);
+
+  const stopAllStreams = () => {
+    [cameraRecorderRef, screenRecorderRef, audioRecorderRef].forEach((recRef) => {
+      const recorder = recRef.current;
+      if (recorder && recorder.state !== 'inactive') {
+        recorder.stop();
+      }
+      recRef.current = null;
+    });
+
+    [cameraStreamRef, screenStreamRef, audioStreamRef].forEach((streamRef) => {
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    });
+  };
+
+  const finalizeBlob = async (recorderRef: React.MutableRefObject<MediaRecorder | null>, chunks: Blob[]) => {
+    const recorder = recorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      return chunks.length > 0 ? new Blob(chunks, { type: 'video/webm' }) : null;
+    }
+
+    await new Promise<void>((resolve) => {
+      recorder.onstop = () => resolve();
+      recorder.stop();
+    });
+
+    return chunks.length > 0 ? new Blob(chunks, { type: 'video/webm' }) : null;
+  };
+
+  const blobToDataUrl = async (blob: Blob | null): Promise<string | undefined> => {
+    if (!blob) {
+      return undefined;
+    }
+
+    return new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result || ''));
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const handleSubmitAnswer = async () => {
     if (!userAnswer.trim() || !currentQuestion) return;
 
     if (answerTooShort) {
       setError(`Answer too short. Add at least ${minWords} words and ${minChars} characters.`);
+      return;
+    }
+
+    if (strictViolation) {
+      setError('High integrity risk detected. Re-enter focus mode and continue without switching tabs/windows.');
       return;
     }
 
@@ -163,8 +326,32 @@ const QuestionPage: React.FC = () => {
         pasteCount,
         keystrokes,
         elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        copyCutCount,
+        fullscreenExits,
       });
       const answer: Answer = response.data;
+
+      if (monitoringEnabled) {
+        const cameraBlob = await finalizeBlob(cameraRecorderRef, cameraChunksRef.current);
+        const screenBlob = await finalizeBlob(screenRecorderRef, screenChunksRef.current);
+        const audioBlob = await finalizeBlob(audioRecorderRef, audioChunksRef.current);
+
+        const videoData = await blobToDataUrl(cameraBlob);
+        const screenData = await blobToDataUrl(screenBlob);
+        const audioData = await blobToDataUrl(audioBlob);
+
+        await behaviorAPI.submit({
+          answerId: answer.id,
+          userAnswer,
+          videoData,
+          screenData,
+          audioData,
+          questionShownAt,
+        });
+
+        stopAllStreams();
+        await enableMonitoring();
+      }
 
       // Store answer
       addAnswer(answer);
@@ -201,9 +388,20 @@ const QuestionPage: React.FC = () => {
 
     if (event.altKey && event.key.toLowerCase() === 's' && currentQuestion) {
       event.preventDefault();
-      const utterance = new SpeechSynthesisUtterance(currentQuestion.text);
-      window.speechSynthesis.speak(utterance);
+      speakQuestion(currentQuestion.text);
     }
+  };
+
+  const handleForbiddenClipboardEvent = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    event.preventDefault();
+    setCopyCutCount((count) => count + 1);
+    setError('Copy/Cut is disabled during interview mode.');
+  };
+
+  const handleContextMenu = (event: React.MouseEvent<HTMLTextAreaElement>) => {
+    event.preventDefault();
+    setCopyCutCount((count) => count + 1);
+    setError('Context menu is disabled during interview mode.');
   };
 
   const handleLogout = () => {
@@ -261,11 +459,9 @@ const QuestionPage: React.FC = () => {
             <button
               className={styles.speakBtn}
               onClick={() => {
-                const utterance = new SpeechSynthesisUtterance(
-                  currentQuestion.text
-                );
-                window.speechSynthesis.speak(utterance);
+                speakQuestion(currentQuestion.text);
               }}
+              type="button"
             >
               <Volume2 size={20} />
             </button>
@@ -283,6 +479,9 @@ const QuestionPage: React.FC = () => {
               onChange={(e) => setUserAnswer(e.target.value)}
               onKeyDown={handleAnswerKeyDown}
               onPaste={() => setPasteCount((count) => count + 1)}
+              onCopy={handleForbiddenClipboardEvent}
+              onCut={handleForbiddenClipboardEvent}
+              onContextMenu={handleContextMenu}
               placeholder="Type your answer here or use voice input..."
               className={styles.answerInput}
               rows={8}
@@ -294,6 +493,24 @@ const QuestionPage: React.FC = () => {
               <span>{charCount} characters</span>
               <span>Paste actions: {pasteCount}</span>
               <span>Tab switches: {tabSwitches}</span>
+              <span>Blur count: {windowBlurCount}</span>
+              <span>Copy/Cut blocked: {copyCutCount}</span>
+              <span>Fullscreen exits: {fullscreenExits}</span>
+            </div>
+
+            <div className={styles.monitoringPanel}>
+              <p>
+                Monitoring mode: {monitoringEnabled ? 'active (camera + screen + audio)' : 'inactive'}
+              </p>
+              <div className={styles.monitoringActions}>
+                <button type="button" className={styles.voiceBtn} onClick={enableMonitoring}>
+                  Enable Monitoring
+                </button>
+                <button type="button" className={styles.voiceBtn} onClick={requestFullscreenMode}>
+                  Enter Focus Mode
+                </button>
+              </div>
+              {monitoringError && <div className={styles.validationError}>{monitoringError}</div>}
             </div>
 
             {answerTooShort && (
@@ -319,7 +536,7 @@ const QuestionPage: React.FC = () => {
               <button
                 className={styles.submitBtn}
                 onClick={handleSubmitAnswer}
-                disabled={!userAnswer.trim() || isSubmitting}
+                disabled={!userAnswer.trim() || isSubmitting || strictViolation}
               >
                 {isSubmitting ? (
                   <Loader size={20} className={styles.spinner} />

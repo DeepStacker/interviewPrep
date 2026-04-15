@@ -38,7 +38,7 @@ RUN echo "NODE_ENV=production" > .env
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:5000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
+  CMD node -e "require('http').get('http://localhost:8000/health', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"
 
 # Use dumb-init to handle signals
 ENTRYPOINT ["dumb-init", "--"]
@@ -46,4 +46,4 @@ ENTRYPOINT ["dumb-init", "--"]
 # Start server
 CMD ["node", "dist/server.js"]
 
-EXPOSE 5000
+EXPOSE 8000

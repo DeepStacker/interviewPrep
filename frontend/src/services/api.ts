@@ -4,6 +4,74 @@ const API_BASE_URL = '/api';
 
 let apiClient: AxiosInstance;
 
+export interface CodingExecutionCaseResult {
+  caseNumber: number;
+  isSample: boolean;
+  passed: boolean;
+  status: string;
+  stdout?: string;
+  stderr?: string;
+  timeTakenMs: number;
+  memoryUsedMb: number;
+  input?: string;
+  expectedOutput?: string;
+}
+
+export interface CodingRunResult {
+  mode: 'sample' | 'custom';
+  status: string;
+  passedTests: number;
+  totalTests: number;
+  score: number;
+  averageTimeMs: number;
+  averageMemoryMb: number;
+  output?: string;
+  stderr?: string;
+  compileOutput?: string;
+  testResults: CodingExecutionCaseResult[];
+}
+
+export interface CodingSubmissionResult {
+  id: number;
+  challengeId: number;
+  codeContent: string;
+  programmingLanguage: string;
+  executionStatus: string;
+  passedTestCases: number;
+  totalTestCases: number;
+  timeTakenMs: number;
+  memoryUsedMb: number;
+  score: number;
+  isAccepted: boolean;
+  feedback?: string;
+  testResults?: CodingExecutionCaseResult[];
+}
+
+export interface UserCoachingPlan {
+  summary: string;
+  focusAreas: Array<{
+    title: string;
+    whyItMatters: string;
+    action: string;
+  }>;
+  weeklyPlan: string[];
+  nextSessionPrompt: string;
+}
+
+export interface UserCoachingResponse {
+  generatedAt: string;
+  evidence: {
+    totalSessions: number;
+    completionRate: string;
+    recentAverageScore: string;
+    monitoringCoverage: string;
+    integrityRiskRate: string;
+    codingAverageScore: string;
+    codingAcceptanceRate: string;
+  };
+  plan: UserCoachingPlan;
+}
+
 export const initializeAPI = (token?: string) => {
   apiClient = axios.create({
     baseURL: API_BASE_URL,
@@ -41,7 +109,14 @@ export const sessionsAPI = {
     jobRole: string;
     companyType?: string;
     difficulty: string;
-    interviewType?: 'mixed' | 'technical' | 'behavioral' | 'system_design' | 'rapid_fire';
+    interviewType?:
+      | 'mixed'
+      | 'technical'
+      | 'behavioral'
+      | 'system_design'
+      | 'rapid_fire'
+      | 'math_reasoning'
+      | 'game_challenge';
   }) => apiClient.post('/sessions', data),
   getAll: (limit = 20, offset = 0) =>
     apiClient.get('/sessions', { params: { limit, offset } }),
@@ -67,6 +142,8 @@ export const answersAPI = {
       tabSwitches?: number;
       windowBlurCount?: number;
       pasteCount?: number;
+      copyCutCount?: number;
+      fullscreenExits?: number;
       elapsedSeconds?: number;
       keystrokes?: number;
     }
@@ -82,8 +159,10 @@ export const codingAPI = {
   searchChallenges: (filters?: { difficulty?: string; category?: string; company?: number; limit?: number; offset?: number }) =>
     apiClient.get('/coding/challenges', { params: filters }),
   getChallenge: (id: number) => apiClient.get(`/coding/challenges/${id}`),
+  runCode: (challengeId: number, code: string, language: string, input?: string) =>
+    apiClient.post<CodingRunResult>('/coding/run', { challengeId, code, language, input }),
   submitSolution: (challengeId: number, code: string, language: string) =>
-    apiClient.post('/coding/submit', { challengeId, code, language }),
+    apiClient.post<CodingSubmissionResult>('/coding/submit', { challengeId, code, language }),
   getStats: () => apiClient.get('/coding/stats'),
   getUserSubmissions: (limit = 20, offset = 0) =>
     apiClient.get('/coding/submissions', { params: { limit, offset } }),
@@ -172,8 +251,23 @@ export const companiesAPI = {
 // Analytics API
 export const analyticsAPI = {
   getUserStats: () => apiClient.get('/analytics/user'),
+  getUserCoach: () => apiClient.get<UserCoachingResponse>('/analytics/user/coach'),
   getAdminUsers: () => apiClient.get('/analytics/admin/users'),
   getAdminTrends: () => apiClient.get('/analytics/admin/trends'),
+};
+
+export const behaviorAPI = {
+  submit: (data: {
+    answerId: number;
+    userAnswer: string;
+    videoData?: string;
+    screenData?: string;
+    audioData?: string;
+    questionShownAt?: string;
+  }) => apiClient.post('/behavior/submit', data),
+  getSessionSummary: (sessionId: number) => apiClient.get(`/behavior/session/${sessionId}`),
+  getSessionAll: (sessionId: number) => apiClient.get(`/behavior/session/${sessionId}/all`),
+  getSessionInsights: (sessionId: number) => apiClient.get(`/behavior/insights/${sessionId}`),
 };
 
 // Initialize with stored token

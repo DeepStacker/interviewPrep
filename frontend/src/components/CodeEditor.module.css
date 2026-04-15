@@ -102,8 +102,23 @@
 
 .editorContainer {
   flex: 1;
-  overflow: hidden;
+  overflow: auto;
   position: relative;
+  display: grid;
+  grid-template-columns: 52px 1fr;
+}
+
+.gutter {
+  margin: 0;
+  padding: 16px 8px 16px 12px;
+  background: #181818;
+  color: #6b7280;
+  text-align: right;
+  user-select: none;
+  border-right: 1px solid #3e3e3e;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: 'Fira Code', 'Consolas', monospace;
 }
 
 .editor {
@@ -120,53 +135,53 @@
   resize: none;
 }
 
+.editor::-webkit-scrollbar,
+.editorContainer::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.editor::-webkit-scrollbar-thumb,
+.editorContainer::-webkit-scrollbar-thumb {
+  background: rgba(100, 116, 139, 0.55);
+  border-radius: 999px;
+}
+
 .container.light .editor {
   background: #ffffff;
   color: #111827;
+}
+
+.container.light .gutter {
+  background: #f8fafc;
+  color: #94a3b8;
+  border-right-color: #e5e7eb;
 }
 
 .editor::selection {
   background: rgba(102, 126, 234, 0.3);
 }
 
-.output {
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
   border-top: 1px solid #3e3e3e;
-  background: #1a1a1a;
-  max-height: 200px;
-  overflow-y: auto;
+  background: #151515;
+  color: #a3a3a3;
+  font-size: 12px;
 }
 
-.container.light .output {
-  background: #f9fafb;
+.container.light .footer {
+  background: #f8fafc;
+  color: #475569;
   border-top-color: #e5e7eb;
 }
 
-.outputHeader {
-  padding: 8px 16px;
-  background: #2d2d2d;
-  color: #d4d4d4;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.container.light .outputHeader {
-  background: #f3f4f6;
-  color: #6b7280;
-}
-
-.outputContent {
-  padding: 12px 16px;
+.footer span {
   margin: 0;
-  color: #d4d4d4;
-  font-size: 12px;
-  line-height: 1.5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.container.light .outputContent {
-  color: #111827;
+  letter-spacing: 0.01em;
 }
 
 @media (max-width: 640px) {
@@ -174,12 +189,26 @@
     border-radius: 8px;
   }
 
+  .editorContainer {
+    grid-template-columns: 44px 1fr;
+  }
+
   .editor {
     font-size: 12px;
     padding: 12px;
   }
 
+  .gutter {
+    font-size: 12px;
+    padding: 12px 6px;
+  }
+
   .header {
     padding: 10px 12px;
+  }
+
+  .footer {
+    font-size: 11px;
+    padding: 8px 10px;
   }
 }

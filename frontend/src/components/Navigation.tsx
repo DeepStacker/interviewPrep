@@ -23,6 +23,9 @@ const Navigation: React.FC<NavigationProps> = ({ onLogout }) => {
           <Link to="/dashboard" className={styles.navLink}>
             Dashboard
           </Link>
+          <Link to="/faang" className={styles.navLink}>
+            Practice Hub
+          </Link>
           <Link to="/setup" className={styles.navLink}>
             Start Interview
           </Link>
