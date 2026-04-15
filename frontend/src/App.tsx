@@ -16,6 +16,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import CodingChallengesPage from './pages/CodingChallengesPage';
 import CodingChallengePage from './pages/CodingChallengePage';
 import SystemDesignPage from './pages/SystemDesignPage';
+import SystemDesignWorkspacePage from './pages/SystemDesignWorkspacePage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import RoadmapPage from './pages/RoadmapPage';
 import AchievementsPage from './pages/AchievementsPage';
@@ -101,6 +102,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <SystemDesignPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/system-design/:id"
+            element={
+              <ProtectedRoute>
+                <SystemDesignWorkspacePage />
               </ProtectedRoute>
             }
           />

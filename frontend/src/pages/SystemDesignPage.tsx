@@ -3,9 +3,32 @@ import { useNavigate } from 'react-router-dom';
 import { systemDesignAPI } from '../services/api';
 import styles from './SystemDesignPage.module.css';
 
+interface SystemDesignProblemListItem {
+  id: number;
+  title: string;
+  description: string;
+  difficulty: 'medium' | 'hard' | string;
+  estimatedTimeMinutes?: number;
+  estimated_time_minutes?: number;
+  estimated_time?: number;
+}
+
+const unwrapData = <T,>(raw: unknown): T => {
+  if (
+    raw &&
+    typeof raw === 'object' &&
+    'data' in (raw as Record<string, unknown>) &&
+    (raw as Record<string, unknown>).data !== undefined
+  ) {
+    return (raw as Record<string, unknown>).data as T;
+  }
+
+  return raw as T;
+};
+
 export default function SystemDesignPage() {
   const navigate = useNavigate();
-  const [problems, setProblems] = useState<any[]>([]);
+  const [problems, setProblems] = useState<SystemDesignProblemListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
 
@@ -17,7 +40,7 @@ export default function SystemDesignPage() {
           difficulty: selectedDifficulty === 'all' ? undefined : selectedDifficulty,
           limit: 50,
         });
-        setProblems(response.data?.data ?? response.data ?? []);
+        setProblems(unwrapData<SystemDesignProblemListItem[]>(response.data));
       } catch (error) {
         console.error('Error fetching problems:', error);
       } finally {
@@ -61,7 +84,9 @@ export default function SystemDesignPage() {
                 </span>
                 <span className={styles.time}>{problem.estimatedTimeMinutes ?? problem.estimated_time_minutes ?? problem.estimated_time ?? 45} min</span>
               </div>
-              <button className={styles.startBtn}>Start Design</button>
+              <button className={styles.startBtn} onClick={() => navigate(`/system-design/${problem.id}`)}>
+                Start Design
+              </button>
             </div>
           ))}
         </div>
