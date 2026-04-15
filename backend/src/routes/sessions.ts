@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import pool from '../config/database';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
+import { getOrSetCache, invalidateUserCaches } from '../utils/cacheManager';
 
 const router = Router();
 
@@ -44,6 +45,8 @@ router.post('/sessions', authMiddleware, async (req: AuthRequest, res: Response)
       [req.userId, jobRole, companyType, difficulty, normalizedInterviewType, 'in_progress']
     );
 
+    invalidateUserCaches(req.userId, ['db:sessions', 'db:analytics', 'ai:coach']);
+
     res.status(201).json(mapSessionRow(result.rows[0]));
   } catch (error) {
     console.error('Create session error:', error);
@@ -62,9 +65,16 @@ router.get('/sessions', authMiddleware, async (req: AuthRequest, res: Response) 
     const limit = parseInt((req.query.limit as string) || '20', 10);
     const offset = parseInt((req.query.offset as string) || '0', 10);
 
-    const result = await pool.query(
-      'SELECT * FROM sessions WHERE user_id = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3',
-      [req.userId, limit, offset]
+    const result = await getOrSetCache(
+      'db:sessions',
+      `list:${limit}:${offset}`,
+      1000 * 60 * 3,
+      () =>
+        pool.query(
+          'SELECT * FROM sessions WHERE user_id = $1 ORDER BY started_at DESC LIMIT $2 OFFSET $3',
+          [req.userId, limit, offset]
+        ),
+      req.userId
     );
 
     res.json(result.rows.map(mapSessionRow));
@@ -82,15 +92,24 @@ router.get('/sessions/:id', authMiddleware, async (req: AuthRequest, res: Respon
       return;
     }
 
-    const result = await pool.query(
-      'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
-      [req.params.id, req.userId]
+    const result = await getOrSetCache(
+      'db:sessions',
+      `detail:${req.params.id}`,
+      1000 * 60 * 3,
+      () =>
+        pool.query(
+          'SELECT * FROM sessions WHERE id = $1 AND user_id = $2',
+          [req.params.id, req.userId]
+        ),
+      req.userId
     );
 
     if (result.rows.length === 0) {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
+
+    invalidateUserCaches(req.userId, ['db:sessions', 'db:analytics', 'ai:coach']);
 
     res.json(mapSessionRow(result.rows[0]));
   } catch (error) {

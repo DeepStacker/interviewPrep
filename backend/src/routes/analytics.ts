@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import pool from '../config/database';
 import { authMiddleware, AuthRequest, adminMiddleware } from '../middleware/auth';
 import { generatePersonalizedCoaching } from '../services/aiService';
+import { getOrSetCache } from '../utils/cacheManager';
 
 const router = Router();
 
@@ -13,108 +14,118 @@ router.get('/analytics/user', authMiddleware, async (req: AuthRequest, res: Resp
       return;
     }
 
-    // Total sessions
-    const sessionsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM sessions WHERE user_id = $1',
-      [req.userId]
+    const cached = await getOrSetCache(
+      'db:analytics',
+      'user-dashboard-v1',
+      1000 * 60 * 2,
+      async () => {
+        // Total sessions
+        const sessionsResult = await pool.query(
+          'SELECT COUNT(*) as count FROM sessions WHERE user_id = $1',
+          [req.userId]
+        );
+
+        const completedResult = await pool.query(
+          "SELECT COUNT(*) as count FROM sessions WHERE user_id = $1 AND status = 'completed'",
+          [req.userId]
+        );
+
+        // Average score
+        const avgResult = await pool.query(
+          'SELECT AVG(CAST(total_score AS FLOAT)) as avg_score FROM sessions WHERE user_id = $1 AND total_score IS NOT NULL',
+          [req.userId]
+        );
+
+        // Recent sessions
+        const recentResult = await pool.query(
+          'SELECT id, job_role, difficulty, interview_type, total_score, started_at FROM sessions WHERE user_id = $1 ORDER BY started_at DESC LIMIT 5',
+          [req.userId]
+        );
+
+        // Stats by role
+        const roleStatsResult = await pool.query(
+          `SELECT job_role, COUNT(*) as sessions, AVG(CAST(total_score AS FLOAT)) as avg_score
+           FROM sessions WHERE user_id = $1
+           GROUP BY job_role`,
+          [req.userId]
+        );
+
+        const trackStatsResult = await pool.query(
+          `SELECT COALESCE(interview_type, 'mixed') as interview_type, COUNT(*)::int as sessions
+           FROM sessions
+           WHERE user_id = $1
+           GROUP BY COALESCE(interview_type, 'mixed')
+           ORDER BY sessions DESC`,
+          [req.userId]
+        );
+
+        const monitoringCoverageResult = await pool.query(
+          `SELECT
+             COUNT(a.id)::int as total_answers,
+             COUNT(bm.id)::int as monitored_answers
+           FROM answers a
+           JOIN questions q ON q.id = a.question_id
+           JOIN sessions s ON s.id = q.session_id
+           LEFT JOIN behavior_metrics bm ON bm.answer_id = a.id
+           WHERE s.user_id = $1`,
+          [req.userId]
+        );
+
+        const integrityRiskResult = await pool.query(
+          `SELECT
+             COUNT(*)::int as total_answers,
+             COUNT(*) FILTER (WHERE validation_summary ILIKE '%flags=%')::int as risk_answers
+           FROM answers a
+           JOIN questions q ON q.id = a.question_id
+           JOIN sessions s ON s.id = q.session_id
+           WHERE s.user_id = $1`,
+          [req.userId]
+        );
+
+      const completedSessions = parseInt(completedResult.rows[0]?.count || '0', 10);
+      const totalSessions = parseInt(sessionsResult.rows[0]?.count || '0', 10);
+      const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
+
+      const totalAnswers = parseInt(monitoringCoverageResult.rows[0]?.total_answers || '0', 10);
+      const monitoredAnswers = parseInt(monitoringCoverageResult.rows[0]?.monitored_answers || '0', 10);
+      const monitoringCoverage = totalAnswers > 0 ? (monitoredAnswers / totalAnswers) * 100 : 0;
+
+        const integrityTotalAnswers = parseInt(integrityRiskResult.rows[0]?.total_answers || '0', 10);
+        const integrityRiskAnswers = parseInt(integrityRiskResult.rows[0]?.risk_answers || '0', 10);
+        const integrityRiskRate = integrityTotalAnswers > 0
+          ? (integrityRiskAnswers / integrityTotalAnswers) * 100
+          : 0;
+
+        return {
+          totalSessions,
+          completedSessions,
+          completionRate: completionRate.toFixed(1),
+          averageScore: parseFloat(avgResult.rows[0]?.avg_score || '0').toFixed(2),
+          monitoringCoverage: monitoringCoverage.toFixed(1),
+          integrityRiskRate: integrityRiskRate.toFixed(1),
+          recentSessions: recentResult.rows.map((row) => ({
+            id: row.id,
+            jobRole: row.job_role,
+            difficulty: row.difficulty,
+            interviewType: row.interview_type,
+            totalScore: row.total_score,
+            startedAt: row.started_at,
+          })),
+          roleStats: roleStatsResult.rows.map((row) => ({
+            jobRole: row.job_role,
+            sessions: row.sessions,
+            averageScore: parseFloat(row.avg_score || '0').toFixed(2),
+          })),
+          trackStats: trackStatsResult.rows.map((row) => ({
+            interviewType: row.interview_type,
+            sessions: row.sessions,
+          })),
+        };
+      },
+      req.userId
     );
 
-    const completedResult = await pool.query(
-      "SELECT COUNT(*) as count FROM sessions WHERE user_id = $1 AND status = 'completed'",
-      [req.userId]
-    );
-
-    // Average score
-    const avgResult = await pool.query(
-      'SELECT AVG(CAST(total_score AS FLOAT)) as avg_score FROM sessions WHERE user_id = $1 AND total_score IS NOT NULL',
-      [req.userId]
-    );
-
-    // Recent sessions
-    const recentResult = await pool.query(
-      'SELECT id, job_role, difficulty, interview_type, total_score, started_at FROM sessions WHERE user_id = $1 ORDER BY started_at DESC LIMIT 5',
-      [req.userId]
-    );
-
-    // Stats by role
-    const roleStatsResult = await pool.query(
-      `SELECT job_role, COUNT(*) as sessions, AVG(CAST(total_score AS FLOAT)) as avg_score
-       FROM sessions WHERE user_id = $1
-       GROUP BY job_role`,
-      [req.userId]
-    );
-
-    const trackStatsResult = await pool.query(
-      `SELECT COALESCE(interview_type, 'mixed') as interview_type, COUNT(*)::int as sessions
-       FROM sessions
-       WHERE user_id = $1
-       GROUP BY COALESCE(interview_type, 'mixed')
-       ORDER BY sessions DESC`,
-      [req.userId]
-    );
-
-    const monitoringCoverageResult = await pool.query(
-      `SELECT
-         COUNT(a.id)::int as total_answers,
-         COUNT(bm.id)::int as monitored_answers
-       FROM answers a
-       JOIN questions q ON q.id = a.question_id
-       JOIN sessions s ON s.id = q.session_id
-       LEFT JOIN behavior_metrics bm ON bm.answer_id = a.id
-       WHERE s.user_id = $1`,
-      [req.userId]
-    );
-
-    const integrityRiskResult = await pool.query(
-      `SELECT
-         COUNT(*)::int as total_answers,
-         COUNT(*) FILTER (WHERE validation_summary ILIKE '%flags=%')::int as risk_answers
-       FROM answers a
-       JOIN questions q ON q.id = a.question_id
-       JOIN sessions s ON s.id = q.session_id
-       WHERE s.user_id = $1`,
-      [req.userId]
-    );
-
-    const completedSessions = parseInt(completedResult.rows[0]?.count || '0', 10);
-    const totalSessions = parseInt(sessionsResult.rows[0]?.count || '0', 10);
-    const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
-
-    const totalAnswers = parseInt(monitoringCoverageResult.rows[0]?.total_answers || '0', 10);
-    const monitoredAnswers = parseInt(monitoringCoverageResult.rows[0]?.monitored_answers || '0', 10);
-    const monitoringCoverage = totalAnswers > 0 ? (monitoredAnswers / totalAnswers) * 100 : 0;
-
-    const integrityTotalAnswers = parseInt(integrityRiskResult.rows[0]?.total_answers || '0', 10);
-    const integrityRiskAnswers = parseInt(integrityRiskResult.rows[0]?.risk_answers || '0', 10);
-    const integrityRiskRate = integrityTotalAnswers > 0
-      ? (integrityRiskAnswers / integrityTotalAnswers) * 100
-      : 0;
-
-    res.json({
-      totalSessions,
-      completedSessions,
-      completionRate: completionRate.toFixed(1),
-      averageScore: parseFloat(avgResult.rows[0]?.avg_score || '0').toFixed(2),
-      monitoringCoverage: monitoringCoverage.toFixed(1),
-      integrityRiskRate: integrityRiskRate.toFixed(1),
-      recentSessions: recentResult.rows.map((row) => ({
-        id: row.id,
-        jobRole: row.job_role,
-        difficulty: row.difficulty,
-        interviewType: row.interview_type,
-        totalScore: row.total_score,
-        startedAt: row.started_at,
-      })),
-      roleStats: roleStatsResult.rows.map((row) => ({
-        jobRole: row.job_role,
-        sessions: row.sessions,
-        averageScore: parseFloat(row.avg_score || '0').toFixed(2),
-      })),
-      trackStats: trackStatsResult.rows.map((row) => ({
-        interviewType: row.interview_type,
-        sessions: row.sessions,
-      })),
-    });
+    res.json(cached);
   } catch (error) {
     console.error('User analytics error:', error);
     res.status(500).json({ error: 'Failed to get analytics' });
@@ -128,16 +139,17 @@ router.get('/analytics/user/coach', authMiddleware, async (req: AuthRequest, res
       return;
     }
 
-    const [
-      sessionsResult,
-      roleStatsResult,
-      interviewTypeResult,
-      recentScoreResult,
-      monitoringResult,
-      integrityResult,
-      codingResult,
-      weakSignalsResult,
-    ] = await Promise.all([
+    const cached = await getOrSetCache('db:analytics', 'user-coach-v1', 1000 * 60 * 3, async () => {
+      const [
+        sessionsResult,
+        roleStatsResult,
+        interviewTypeResult,
+        recentScoreResult,
+        monitoringResult,
+        integrityResult,
+        codingResult,
+        weakSignalsResult,
+      ] = await Promise.all([
       pool.query(
         `SELECT COUNT(*)::int as total_sessions,
                 COUNT(*) FILTER (WHERE status = 'completed')::int as completed_sessions
@@ -212,21 +224,21 @@ router.get('/analytics/user/coach', authMiddleware, async (req: AuthRequest, res
          LIMIT 5`,
         [req.userId]
       ),
-    ]);
+      ]);
 
-    const totalSessions = Number(sessionsResult.rows[0]?.total_sessions || 0);
-    const completedSessions = Number(sessionsResult.rows[0]?.completed_sessions || 0);
-    const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
+      const totalSessions = Number(sessionsResult.rows[0]?.total_sessions || 0);
+      const completedSessions = Number(sessionsResult.rows[0]?.completed_sessions || 0);
+      const completionRate = totalSessions > 0 ? (completedSessions / totalSessions) * 100 : 0;
 
-    const totalAnswers = Number(monitoringResult.rows[0]?.total_answers || 0);
-    const monitoredAnswers = Number(monitoringResult.rows[0]?.monitored_answers || 0);
-    const monitoringCoverage = totalAnswers > 0 ? (monitoredAnswers / totalAnswers) * 100 : 0;
+      const totalAnswers = Number(monitoringResult.rows[0]?.total_answers || 0);
+      const monitoredAnswers = Number(monitoringResult.rows[0]?.monitored_answers || 0);
+      const monitoringCoverage = totalAnswers > 0 ? (monitoredAnswers / totalAnswers) * 100 : 0;
 
-    const integrityTotal = Number(integrityResult.rows[0]?.total_answers || 0);
-    const integrityRisk = Number(integrityResult.rows[0]?.risk_answers || 0);
-    const integrityRiskRate = integrityTotal > 0 ? (integrityRisk / integrityTotal) * 100 : 0;
+      const integrityTotal = Number(integrityResult.rows[0]?.total_answers || 0);
+      const integrityRisk = Number(integrityResult.rows[0]?.risk_answers || 0);
+      const integrityRiskRate = integrityTotal > 0 ? (integrityRisk / integrityTotal) * 100 : 0;
 
-    const coachingPlan = await generatePersonalizedCoaching({
+      const coachingPlan = await generatePersonalizedCoaching({
       jobRoles: roleStatsResult.rows.map((row) => ({
         role: row.job_role,
         averageScore: Number(row.avg_score || 0),
@@ -247,19 +259,22 @@ router.get('/analytics/user/coach', authMiddleware, async (req: AuthRequest, res
         .filter((value) => value.length > 0),
     });
 
-    res.json({
-      generatedAt: new Date().toISOString(),
-      evidence: {
-        totalSessions,
-        completionRate: completionRate.toFixed(1),
-        recentAverageScore: Number(recentScoreResult.rows[0]?.avg_score || 0).toFixed(2),
-        monitoringCoverage: monitoringCoverage.toFixed(1),
-        integrityRiskRate: integrityRiskRate.toFixed(1),
-        codingAverageScore: Number(codingResult.rows[0]?.coding_avg_score || 0).toFixed(2),
-        codingAcceptanceRate: Number(codingResult.rows[0]?.coding_acceptance_rate || 0).toFixed(1),
-      },
-      plan: coachingPlan,
-    });
+      return {
+        generatedAt: new Date().toISOString(),
+        evidence: {
+          totalSessions,
+          completionRate: completionRate.toFixed(1),
+          recentAverageScore: Number(recentScoreResult.rows[0]?.avg_score || 0).toFixed(2),
+          monitoringCoverage: monitoringCoverage.toFixed(1),
+          integrityRiskRate: integrityRiskRate.toFixed(1),
+          codingAverageScore: Number(codingResult.rows[0]?.coding_avg_score || 0).toFixed(2),
+          codingAcceptanceRate: Number(codingResult.rows[0]?.coding_acceptance_rate || 0).toFixed(1),
+        },
+        plan: coachingPlan,
+      };
+    }, req.userId);
+
+    res.json(cached);
   } catch (error) {
     console.error('User coaching analytics error:', error);
     res.status(500).json({ error: 'Failed to generate coaching plan' });

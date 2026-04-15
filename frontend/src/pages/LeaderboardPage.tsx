@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { leaderboardAPI } from '../services/api';
 import styles from './LeaderboardPage.module.css';
 
 export default function LeaderboardPage() {
+  const navigate = useNavigate();
   const [leaderboard, setLeaderboard] = useState<any[]>([]);
   const [userRank, setUserRank] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -36,6 +38,9 @@ export default function LeaderboardPage() {
 
   return (
     <div className={styles.container}>
+      <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+        ← Back
+      </button>
       <div className={styles.header}>
         <h1>Leaderboard</h1>
         <p>Global rankings by experience points</p>

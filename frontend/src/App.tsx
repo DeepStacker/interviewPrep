@@ -19,6 +19,7 @@ import SystemDesignPage from './pages/SystemDesignPage';
 import LeaderboardPage from './pages/LeaderboardPage';
 import RoadmapPage from './pages/RoadmapPage';
 import AchievementsPage from './pages/AchievementsPage';
+import ResumePage from './pages/ResumePage';
 
 // Protected route wrapper
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -124,6 +125,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <AchievementsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/resume"
+            element={
+              <ProtectedRoute>
+                <ResumePage />
               </ProtectedRoute>
             }
           />

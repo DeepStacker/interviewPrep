@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import pool from '../config/database';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { evaluateAnswer } from '../services/aiService';
+import { invalidateUserCaches } from '../utils/cacheManager';
 
 const router = Router();
 
@@ -81,6 +82,8 @@ router.post('/answers', authMiddleware, async (req: AuthRequest, res: Response) 
         buildValidationSummary(wordCount, normalizedAnswer.length, integrityFlags),
       ]
     );
+
+    invalidateUserCaches(req.userId, ['db:analytics', 'db:questions', 'db:sessions', 'ai:coach']);
 
     res.status(201).json(mapAnswerRow(result.rows[0]));
   } catch (error) {

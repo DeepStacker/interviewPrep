@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { badgesAPI } from '../services/api';
 import styles from './AchievementsPage.module.css';
 
 export default function AchievementsPage() {
+  const navigate = useNavigate();
   const [badges, setBadges] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,6 +37,9 @@ export default function AchievementsPage() {
 
   return (
     <div className={styles.container}>
+      <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+        ← Back
+      </button>
       <div className={styles.header}>
         <h1>Achievements & Badges</h1>
         <p>

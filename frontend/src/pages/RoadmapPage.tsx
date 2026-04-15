@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useRoadmapStore, Roadmap } from '../stores/roadmapStore';
 import { roadmapAPI } from '../services/api';
 import styles from './RoadmapPage.module.css';
 
 export default function RoadmapPage() {
+  const navigate = useNavigate();
   const store = useRoadmapStore();
   const [loading, setLoading] = useState(true);
   const [roadmapType, setRoadmapType] = useState('new_grad');
@@ -89,6 +91,9 @@ export default function RoadmapPage() {
   if (loading) {
     return (
       <div className={styles.container}>
+        <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+          ← Back
+        </button>
         <div className={styles.loading}>Generating your personalized roadmap...</div>
       </div>
     );
@@ -97,6 +102,9 @@ export default function RoadmapPage() {
   if (!store.roadmap) {
     return (
       <div className={styles.container}>
+        <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+          ← Back
+        </button>
         <div className={styles.header}>
           <h1>Preparation Roadmap</h1>
           <p>Create your personalized interview preparation plan</p>
@@ -136,6 +144,9 @@ export default function RoadmapPage() {
 
   return (
     <div className={styles.container}>
+      <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+        ← Back
+      </button>
       <div className={styles.header}>
         <h1>Your Preparation Roadmap</h1>
         <div className={styles.roadmapInfo}>

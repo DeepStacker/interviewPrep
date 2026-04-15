@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { systemDesignAPI } from '../services/api';
 import styles from './SystemDesignPage.module.css';
 
 export default function SystemDesignPage() {
+  const navigate = useNavigate();
   const [problems, setProblems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
@@ -28,6 +30,9 @@ export default function SystemDesignPage() {
 
   return (
     <div className={styles.container}>
+      <button type="button" onClick={() => navigate(-1)} style={{ marginBottom: 12 }}>
+        ← Back
+      </button>
       <div className={styles.header}>
         <h1>System Design Problems</h1>
         <p>Practice designing large-scale systems</p>

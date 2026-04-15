@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import pool from '../config/database';
 import { authMiddleware, AuthRequest } from '../middleware/auth';
 import { generateQuestions } from '../services/aiService';
+import { getOrSetCache, invalidateUserCaches } from '../utils/cacheManager';
 
 const router = Router();
 
@@ -33,6 +34,15 @@ router.post('/questions/generate', authMiddleware, async (req: AuthRequest, res:
 
     const session = sessionResult.rows[0];
 
+    const existingQuestions = await pool.query(
+      'SELECT * FROM questions WHERE session_id = $1 ORDER BY question_number ASC',
+      [sessionId]
+    );
+    if (existingQuestions.rows.length > 0) {
+      res.json(existingQuestions.rows.map(mapQuestionRow));
+      return;
+    }
+
     // Generate questions using AI
     const questions = await generateQuestions(
       session.job_role,
@@ -53,6 +63,8 @@ router.post('/questions/generate', authMiddleware, async (req: AuthRequest, res:
       );
       savedQuestions.push(mapQuestionRow(result.rows[0]));
     }
+
+    invalidateUserCaches(req.userId, ['db:questions', 'db:analytics', 'ai:coach']);
 
     res.status(201).json(savedQuestions);
   } catch (error) {
@@ -81,9 +93,16 @@ router.get('/sessions/:sessionId/questions', authMiddleware, async (req: AuthReq
     }
 
     // Get questions
-    const result = await pool.query(
-      'SELECT * FROM questions WHERE session_id = $1 ORDER BY question_number ASC',
-      [req.params.sessionId]
+    const result = await getOrSetCache(
+      'db:questions',
+      `session:${req.params.sessionId}`,
+      1000 * 60 * 5,
+      () =>
+        pool.query(
+          'SELECT * FROM questions WHERE session_id = $1 ORDER BY question_number ASC',
+          [req.params.sessionId]
+        ),
+      req.userId
     );
 
     res.json(result.rows.map(mapQuestionRow));

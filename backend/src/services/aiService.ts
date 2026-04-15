@@ -1,6 +1,8 @@
 import Groq from 'groq-sdk';
 import axios from 'axios';
+import { createHash } from 'crypto';
 import { config } from '../config/env';
+import { getOrSetCache } from '../utils/cacheManager';
 
 const groq = new Groq({
   apiKey: config.ai.groqApiKey,
@@ -57,10 +59,16 @@ export const generateQuestions = async (
 
   try {
     const prompt = `Generate ${numberOfQuestions} ${difficulty} level ${interviewType} interview questions for a ${role} position at a ${companyType} company.`;
-    const content = await getAiResponse(systemPrompt, prompt, {
-      temperature: 0.7,
-      maxTokens: 2000,
-    });
+    const content = await getOrSetCache(
+      'ai:questions',
+      buildCacheHash({ role, difficulty, numberOfQuestions, interviewType, companyType }),
+      1000 * 60 * 30,
+      () =>
+        getAiResponse(systemPrompt, prompt, {
+          temperature: 0.7,
+          maxTokens: 2000,
+        })
+    );
 
     return parseQuestionsFromContent(
       content,
@@ -88,10 +96,16 @@ export const evaluateAnswer = async (
 
   try {
     const prompt = `Question: ${question}\n\nCandidate's Answer: ${userAnswer}\n\nPlease evaluate this answer and provide constructive feedback.`;
-    const content = await getAiResponse(systemPrompt, prompt, {
-      temperature: 0.5,
-      maxTokens: 1500,
-    });
+    const content = await getOrSetCache(
+      'ai:evaluation',
+      buildCacheHash({ role, question, userAnswer, difficulty }),
+      1000 * 60 * 60,
+      () =>
+        getAiResponse(systemPrompt, prompt, {
+          temperature: 0.5,
+          maxTokens: 1500,
+        })
+    );
 
     return parseEvaluationFromContent(content);
   } catch (error) {
@@ -121,10 +135,16 @@ export const generatePersonalizedCoaching = async (
 
   try {
     const prompt = `User metrics:\n${JSON.stringify(input, null, 2)}\n\nGenerate a high-impact plan.`;
-    const content = await getAiResponse(systemPrompt, prompt, {
-      temperature: 0.35,
-      maxTokens: 1200,
-    });
+    const content = await getOrSetCache(
+      'ai:coach',
+      buildCacheHash(input),
+      1000 * 60 * 20,
+      () =>
+        getAiResponse(systemPrompt, prompt, {
+          temperature: 0.35,
+          maxTokens: 1200,
+        })
+    );
 
     return parseCoachingPlanFromContent(content, input);
   } catch (error) {
@@ -407,6 +427,9 @@ const buildFallbackCoachingPlan = (
       'Start a medium-difficulty session now and optimize for one goal only: stronger trade-off explanation with measurable outcomes.',
   };
 };
+
+const buildCacheHash = (payload: unknown): string =>
+  createHash('sha256').update(JSON.stringify(payload)).digest('hex');
 
 const buildFallbackQuestions = (
   role: string,

@@ -113,6 +113,18 @@ if __name__ == "__main__":
     sys.stdout.write(str(result) + "\\n")`;
 };
 
+const mapSubmissionToRunResult = (submission: CodingSubmissionResult): CodingRunResult => ({
+  mode: 'sample',
+  status: submission.isAccepted ? 'Accepted' : 'Rejected',
+  passedTests: submission.passedTestCases,
+  totalTests: submission.totalTestCases,
+  score: toNumberOrZero(submission.score),
+  averageTimeMs: submission.timeTakenMs ?? 0,
+  averageMemoryMb: toNumberOrZero(submission.memoryUsedMb),
+  stderr: submission.feedback,
+  testResults: submission.testResults ?? [],
+});
+
 export default function CodingChallengePage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -196,6 +208,32 @@ export default function CodingChallengePage() {
       setActiveTab('testcases');
     } catch (error: any) {
       console.error('Error running code:', error);
+
+      const statusCode = Number(error?.response?.status || 0);
+      const isRunEndpointMissing = statusCode === 404;
+
+      if (isRunEndpointMissing) {
+        if (customInput.trim()) {
+          setSubmitError('Custom input run is unavailable until backend route /coding/run is enabled.');
+          return;
+        }
+
+        try {
+          const fallbackResponse = await codingAPI.submitSolution(parseInt(id!, 10), code, language);
+          const submission = fallbackResponse.data;
+          setRunResult(mapSubmissionToRunResult(submission));
+          setSubmitError('Run endpoint unavailable; executed using full submission compatibility mode.');
+          setActiveTab('testcases');
+          return;
+        } catch (fallbackError: any) {
+          setSubmitError(
+            fallbackError?.response?.data?.error ||
+              'Run endpoint unavailable and fallback execution failed.'
+          );
+          return;
+        }
+      }
+
       setSubmitError(error?.response?.data?.error || 'Unable to run code.');
     } finally {
       setRunning(false);
