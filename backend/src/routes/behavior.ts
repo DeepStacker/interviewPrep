@@ -59,28 +59,28 @@ router.post('/behavior/submit', authMiddleware, async (req: AuthRequest, res: Re
     const videoBuffer = decodeMediaPayload(videoData);
     const screenBuffer = decodeMediaPayload(screenData);
 
-    let videoRecordingUrl: string | undefined;
-    let screenRecordingUrl: string | undefined;
+    const videoSavePromise =
+      videoBuffer.length > 0
+        ? saveVideoRecording(videoBuffer, sessionId, answerId)
+        : Promise.resolve<string | undefined>(undefined);
 
-    if (videoBuffer.length > 0) {
-      videoRecordingUrl = await saveVideoRecording(videoBuffer, sessionId, answerId);
-    }
+    const screenSavePromise =
+      screenBuffer.length > 0
+        ? saveScreenRecording(screenBuffer, sessionId, answerId)
+        : Promise.resolve<string | undefined>(undefined);
 
-    if (screenBuffer.length > 0) {
-      screenRecordingUrl = await saveScreenRecording(screenBuffer, sessionId, answerId);
-    }
+    const voicePromise = analyzeVoice(audioBuffer, userAnswer);
+    const behaviorPromise =
+      videoBuffer.length > 0
+        ? analyzeBehavior(videoBuffer)
+        : Promise.resolve<Awaited<ReturnType<typeof analyzeBehavior>> | null>(null);
 
-    // Analyze voice/answer data
-    const voiceAnalysis = await analyzeVoice(
-      audioBuffer,
-      userAnswer
-    );
-
-    // Analyze video behavior (if video provided)
-    let behaviorAnalysis = null;
-    if (videoBuffer.length > 0) {
-      behaviorAnalysis = await analyzeBehavior(videoBuffer);
-    }
+    const [videoRecordingUrl, screenRecordingUrl, voiceAnalysis, behaviorAnalysis] = await Promise.all([
+      videoSavePromise,
+      screenSavePromise,
+      voicePromise,
+      behaviorPromise,
+    ]);
 
     // Calculate response time
     const responseTime = questionShownAt

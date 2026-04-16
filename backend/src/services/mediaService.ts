@@ -124,7 +124,13 @@ export const analyzeVoice = async (
   userAnswer: string
 ): Promise<VoiceAnalysisResult> => {
   try {
-    const mediaProbe = await probeMediaBuffer(audioBuffer, 'audio');
+    const mediaProbe =
+      audioBuffer.length > 0
+        ? await probeMediaBuffer(audioBuffer, 'audio')
+        : {
+            durationSeconds: 0,
+            bitRateKbps: 0,
+          };
 
     // Parse user answer for word analysis
     const words = userAnswer
