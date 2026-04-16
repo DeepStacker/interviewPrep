@@ -3,12 +3,13 @@ databases:
     databaseName: interview_prep_db
     user: interview_user
     plan: free
+    region: oregon
 
 services:
   - type: web
     name: interviewprep-backend
     env: node
-    region: singapore
+    region: oregon
     plan: free
     rootDir: backend
     buildCommand: npm ci --include=dev && npm run build
