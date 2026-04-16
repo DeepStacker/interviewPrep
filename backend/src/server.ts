@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
+import rateLimit from 'express-rate-limit';
 import * as dotenv from 'dotenv';
+import { randomUUID } from 'crypto';
 import { initializeDatabase } from './config/database';
 import pool from './config/database';
 import { config } from './config/env';
@@ -28,6 +30,50 @@ dotenv.config();
 
 const app = express();
 
+const globalRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: config.app.nodeEnv === 'production' ? 1200 : 3000,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please retry shortly.',
+  },
+});
+
+const authRateLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: config.app.nodeEnv === 'production' ? 50 : 250,
+  standardHeaders: 'draft-8',
+  legacyHeaders: false,
+  message: {
+    error: 'Too many authentication attempts. Please retry later.',
+  },
+});
+
+app.set('trust proxy', 1);
+
+app.use((req, res, next) => {
+  const requestId = req.header('x-request-id') || randomUUID();
+  const start = process.hrtime.bigint();
+
+  res.setHeader('x-request-id', requestId);
+  res.on('finish', () => {
+    const elapsedMs = Number(process.hrtime.bigint() - start) / 1_000_000;
+    console.info(
+      JSON.stringify({
+        requestId,
+        method: req.method,
+        path: req.originalUrl,
+        statusCode: res.statusCode,
+        durationMs: Number(elapsedMs.toFixed(2)),
+        ip: req.ip,
+      })
+    );
+  });
+
+  next();
+});
+
 // Security & Performance Middleware
 app.use(helmet({
   crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
@@ -35,6 +81,7 @@ app.use(helmet({
 app.use(compression()); // Gzip compression
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use('/api', globalRateLimiter);
 
 // CORS configuration
 app.use(
@@ -60,6 +107,7 @@ app.use(
 );
 
 // Routes
+app.use('/api/auth', authRateLimiter);
 app.use('/api', authRoutes);
 app.use('/api', sessionsRoutes);
 app.use('/api', questionsRoutes);

@@ -15,7 +15,7 @@ services:
     plan: free
     rootDir: backend
     buildCommand: npm ci --include=dev && npm run build
-    startCommand: npm start
+    startCommand: npm run migrate:prod && npm start
     healthCheckPath: /healthz
     autoDeploy: true
     envVars:
@@ -28,7 +28,7 @@ services:
       - key: DIRECT_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://interviewprep-frontend.onrender.com
+        sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID
@@ -67,6 +67,6 @@ services:
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        value: https://interviewprep-backend.onrender.com/api
+        sync: false
       - key: VITE_GOOGLE_CLIENT_ID
         sync: false
