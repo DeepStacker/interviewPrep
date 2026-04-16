@@ -38,5 +38,9 @@ export const config = {
   },
   frontend: {
     url: process.env.FRONTEND_URL || 'http://localhost:3000',
+    urls: (process.env.FRONTEND_URL || 'http://localhost:3000')
+      .split(',')
+      .map((url) => url.trim())
+      .filter(Boolean),
   },
 };

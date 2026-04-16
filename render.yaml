@@ -1,0 +1,72 @@
+databases:
+  - name: interviewprep-postgres
+    databaseName: interview_prep_db
+    user: interview_user
+    plan: free
+
+services:
+  - type: web
+    name: interviewprep-backend
+    env: node
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 8000
+      - key: DATABASE_URL
+        fromDatabase:
+          name: interviewprep-postgres
+          property: connectionString
+      - key: DIRECT_URL
+        fromDatabase:
+          name: interviewprep-postgres
+          property: connectionString
+      - key: FRONTEND_URL
+        value: https://interviewprep-frontend.onrender.com,http://localhost:3000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: DEFAULT_AI_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: GOOGLE_AI_KEY
+        sync: false
+      - key: CEREBRAS_API_KEY
+        sync: false
+      - key: XAI_API_KEY
+        sync: false
+      - key: AI_MODEL
+        value: meta-llama/llama-3.3-70b-instruct:free
+      - key: JUDGE0_URL
+        value: https://ce.judge0.com
+      - key: JUDGE0_API_KEY
+        sync: false
+
+  - type: static
+    name: interviewprep-frontend
+    rootDir: frontend
+    buildCommand: npm ci && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: VITE_API_BASE_URL
+        value: https://interviewprep-backend.onrender.com/api
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false

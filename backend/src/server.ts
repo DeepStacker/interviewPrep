@@ -39,7 +39,20 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // CORS configuration
 app.use(
   cors({
-    origin: config.frontend.url || 'http://localhost:3000',
+    origin: (origin, callback) => {
+      // Allow non-browser clients (health checks, server-to-server requests).
+      if (!origin) {
+        callback(null, true);
+        return;
+      }
+
+      if (config.frontend.urls.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],

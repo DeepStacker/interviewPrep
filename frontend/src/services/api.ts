@@ -1,6 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 
-const API_BASE_URL = '/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
 let apiClient: AxiosInstance;
 const clientMemoryCache = new Map<string, { data: any; expiresAt: number }>();
