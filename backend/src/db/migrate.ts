@@ -23,6 +23,15 @@ const resolveDatabaseUrl = (rawUrl?: string): string | undefined => {
       }
     }
 
+    const sslMode = parsed.searchParams.get('sslmode');
+    if (
+      sslMode &&
+      ['prefer', 'require', 'verify-ca'].includes(sslMode) &&
+      !parsed.searchParams.has('uselibpqcompat')
+    ) {
+      parsed.searchParams.set('uselibpqcompat', 'true');
+    }
+
     return parsed.toString();
   } catch {
     return rawUrl;

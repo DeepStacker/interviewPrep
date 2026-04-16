@@ -28,7 +28,7 @@ services:
       - key: DIRECT_URL
         sync: false
       - key: FRONTEND_URL
-        value: https://interviewprep-frontend.onrender.com,http://localhost:3000
+        value: https://interviewprep-frontend.onrender.com
       - key: JWT_SECRET
         generateValue: true
       - key: GOOGLE_CLIENT_ID
