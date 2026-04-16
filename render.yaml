@@ -55,7 +55,8 @@ services:
       - key: JUDGE0_API_KEY
         sync: false
 
-  - type: static
+  - type: web
+    env: static
     name: interviewprep-frontend
     rootDir: frontend
     buildCommand: npm ci && npm run build
