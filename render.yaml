@@ -11,7 +11,7 @@ services:
     region: singapore
     plan: free
     rootDir: backend
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /healthz
     autoDeploy: true
@@ -59,7 +59,7 @@ services:
     env: static
     name: interviewprep-frontend
     rootDir: frontend
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     staticPublishPath: dist
     autoDeploy: true
     routes:
