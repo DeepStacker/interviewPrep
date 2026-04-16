@@ -5,8 +5,43 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
+const resolveDatabaseUrl = (rawUrl?: string): string | undefined => {
+  if (!rawUrl) {
+    return rawUrl;
+  }
+
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname;
+
+    if (/^dpg-[a-z0-9-]+-a$/i.test(hostname) && !hostname.includes('.')) {
+      const region = (process.env.RENDER_REGION || 'oregon').toLowerCase();
+      parsed.hostname = `${hostname}.${region}-postgres.render.com`;
+
+      if (!parsed.searchParams.has('sslmode')) {
+        parsed.searchParams.set('sslmode', 'require');
+      }
+    }
+
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+};
+
+const connectionString = resolveDatabaseUrl(
+  process.env.DIRECT_URL || process.env.DATABASE_URL
+);
+
+const useSsl = Boolean(
+  connectionString &&
+    connectionString.includes('render.com') &&
+    !connectionString.includes('localhost')
+);
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString,
+  ...(useSsl ? { ssl: { rejectUnauthorized: false } } : {}),
 });
 
 const MIGRATIONS_DIR = path.resolve(__dirname, '../../migrations');

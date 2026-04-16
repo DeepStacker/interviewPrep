@@ -1,3 +1,5 @@
+# Optional: this managed Render Postgres is not used when DATABASE_URL/DIRECT_URL
+# are provided manually (Supabase). Keep or remove as preferred.
 databases:
   - name: interviewprep-postgres
     databaseName: interview_prep_db
@@ -22,13 +24,9 @@ services:
       - key: PORT
         value: 8000
       - key: DATABASE_URL
-        fromDatabase:
-          name: interviewprep-postgres
-          property: connectionString
+        sync: false
       - key: DIRECT_URL
-        fromDatabase:
-          name: interviewprep-postgres
-          property: connectionString
+        sync: false
       - key: FRONTEND_URL
         value: https://interviewprep-frontend.onrender.com,http://localhost:3000
       - key: JWT_SECRET
